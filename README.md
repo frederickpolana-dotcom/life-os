@@ -10,17 +10,17 @@ A retro-styled desktop productivity app that turns your goals, habits, and daily
 
 ---
 
-## ✨ What is this?
+## What is this?
 
 Life OS is a **personal operating system** for ambitious people who think spreadsheets are boring and Notion is too slow. It gamifies the things that actually matter:
 
-- 🏔️ **Epics** — Big goals broken into subtasks with real progress tracking
-- 🔥 **Streaks** — Daily habits with a 28-day calendar grid, current streak & best streak
-- ⏱️ **Time Audit** — Weekly hours breakdown across deep work, learning, admin, social, rest
-- 🤝 **Network CRM** — Keep track of mentors, peers, and leads with follow-up reminders
-- 📓 **Weekly Review** — Structured reflection: what worked, what didn't, what to drop
-- ⚡ **Energy Log** — Daily 1–5 energy ratings with a 30-day trend chart
-- 🤖 **AI Coach** — A built-in AI assistant (Claude / GPT / Gemini / Ollama) that can actually *do things* in the app — create goals, add tasks, log habits, navigate pages
+- **Epics** — Big goals broken into subtasks with real progress tracking
+- **Streaks** — Daily habits with a 28-day calendar grid, current streak & best streak
+- **Time Audit** — Weekly hours breakdown across deep work, learning, admin, social, rest
+- **Network CRM** — Keep track of mentors, peers, and leads with follow-up reminders
+- **Weekly Review** — Structured reflection: what worked, what didn't, what to drop
+- **Energy Log** — Daily 1–5 energy ratings with a 30-day trend chart
+- **AI Coach** — A built-in AI assistant (Claude / GPT / Gemini / Ollama) that can actually *do things* in the app — create goals, add tasks, log habits, navigate pages
 
 Everything earns **XP**. XP fills a level bar. Leveling up triggers confetti and a chiptune sound. Because why not.
 
@@ -81,7 +81,7 @@ Level-up = confetti + toast notification.
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) v18+
@@ -109,7 +109,7 @@ Installer outputs to `dist-electron/Life OS Setup 1.0.0.exe`.
 
 ---
 
-## 🤖 AI Setup
+##  AI Setup
 
 Go to **Settings → AI Provider** and pick your backend:
 
@@ -128,7 +128,7 @@ ollama pull gemma4:31b-cloud
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 life-os/
@@ -155,7 +155,7 @@ life-os/
 
 ---
 
-## 🎨 Design System
+## Design System
 
 The UI follows a **retro game aesthetic** — dark chrome bezel + bright content screen, pixel-art shadows, and a custom color palette:
 
@@ -172,7 +172,7 @@ Retro cards have a `3px 3px 0` hard drop shadow (no blur) — pure pixel-art ene
 
 ---
 
-## 🔒 Security
+## Security
 
 - AI API keys are **never exposed in the renderer process** — all AI calls go through Electron's main process via IPC
 - Keys are **XOR-encrypted** using a machine-specific salt (hostname + username) before writing to SQLite
@@ -180,7 +180,7 @@ Retro cards have a `3px 3px 0` hard drop shadow (no blur) — pure pixel-art ene
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [ ] Mobile companion app (view streaks + log habits on the go)
 - [ ] Calendar integration (sync due dates with Google Calendar)
@@ -190,7 +190,7 @@ Retro cards have a `3px 3px 0` hard drop shadow (no blur) — pure pixel-art ene
 
 ---
 
-## 👤 Author
+## Author
 
 **Frederick Polana**
 - GitHub: [@frederickpolana-dotcom](https://github.com/frederickpolana-dotcom)
@@ -198,7 +198,7 @@ Retro cards have a `3px 3px 0` hard drop shadow (no blur) — pure pixel-art ene
 
 ---
 
-## 📄 License
+## License
 
 MIT — do whatever you want with it, just don't claim you built it from scratch.
 
