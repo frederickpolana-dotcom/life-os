@@ -91,8 +91,8 @@ Level-up = confetti + toast notification.
 ### Install & Run
 
 ```bash
-git clone https://github.com/frederickpolana-dotcom/bolobolo123.git
-cd bolobolo123
+git clone https://github.com/frederickpolana-dotcom/life-os.git
+cd life-os
 npm install
 npm run dev
 ```
