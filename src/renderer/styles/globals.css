@@ -1,0 +1,200 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary:      #1D9E75;
+  --color-teal-dark:    #085041;
+  --color-teal-med:     #0F6E56;
+  --color-teal-light:   #E1F5EE;
+  --color-teal-border:  #d4f0e6;
+  --color-teal-pale:    #f7fdfb;
+  --color-amber:        #EF9F27;
+  --color-purple:       #7F77DD;
+  --color-green-done:   #639922;
+  --color-text-pri:     #085041;
+  --color-text-sec:     #444441;
+  --color-text-muted:   #888780;
+  --color-text-hint:    #B4B2A9;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  font-family: 'Nunito', sans-serif;
+  background-color: #f7fdfb;
+  color: #085041;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: #d4f0e6; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #1D9E75; }
+
+/* Checkbox animation */
+@keyframes checkBounce {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.25); }
+  70%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+.check-animate { animation: checkBounce 200ms ease-out; }
+
+/* Progress bar transition */
+.progress-fill { transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Page fade-in */
+@keyframes pageFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-enter { animation: pageFade 150ms ease-out; }
+
+/* AI panel slide-up */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-up { animation: slideUp 300ms cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* XP float toast */
+@keyframes xpFloat {
+  0%   { opacity: 0; transform: translateY(0) scale(0.8); }
+  20%  { opacity: 1; transform: translateY(-8px) scale(1.1); }
+  80%  { opacity: 1; transform: translateY(-20px) scale(1); }
+  100% { opacity: 0; transform: translateY(-32px) scale(0.9); }
+}
+.xp-float { animation: xpFloat 1.1s ease-out forwards; }
+
+/* Streak fire glow */
+@keyframes fireGlow {
+  0%, 100% { text-shadow: 0 0 4px rgba(239,159,39,0.4); }
+  50%       { text-shadow: 0 0 14px rgba(239,159,39,1); }
+}
+.fire-glow { animation: fireGlow 1.8s ease-in-out infinite; }
+
+/* Bounce on task complete */
+@keyframes taskDone {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.18); }
+  65%  { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+.task-done { animation: taskDone 280ms ease-out; }
+
+/* Shimmer on XP bar level up */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.xp-shimmer {
+  background: linear-gradient(90deg, #1D9E75 0%, #E1F5EE 50%, #1D9E75 100%);
+  background-size: 200% auto;
+  animation: shimmer 1s linear 3;
+}
+
+/* ── Gamy UI extras ─────────────────────────────────────────── */
+
+/* Subtle pixel-dot grid behind content */
+.game-bg {
+  background-image: radial-gradient(circle, rgba(29,158,117,0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Retro press effect on buttons */
+.game-btn {
+  box-shadow: 0 4px 0 rgba(8,80,65,0.22);
+  transition: transform 0.07s, box-shadow 0.07s;
+}
+.game-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 rgba(8,80,65,0.22);
+}
+
+/* Soft glow on primary elements */
+.game-glow {
+  box-shadow: 0 0 14px rgba(29,158,117,0.45), 0 0 4px rgba(29,158,117,0.25);
+}
+
+/* Mario AI button bob */
+@keyframes marioBob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%       { transform: translateY(-4px) scale(1.04); }
+}
+.mario-bob { animation: marioBob 1.6s ease-in-out infinite; }
+
+/* Coin wobble for level badge */
+@keyframes coinWobble {
+  0%, 100% { transform: rotate(-3deg) scale(1); }
+  50%       { transform: rotate(3deg) scale(1.08); }
+}
+.coin-wobble { animation: coinWobble 2.4s ease-in-out infinite; }
+
+/* Stat card shimmer on hover */
+@keyframes statShine {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Active nav glow */
+@keyframes navPulse {
+  0%, 100% { box-shadow: inset 3px 0 0 #1D9E75; }
+  50%       { box-shadow: inset 3px 0 0 #26c98c, 4px 0 12px rgba(29,158,117,0.3); }
+}
+.nav-active-glow { animation: navPulse 2s ease-in-out infinite; }
+
+/* Mario confused shake */
+@keyframes confusedShake {
+  0%, 100% { transform: translateX(0)    rotate(0deg); }
+  25%       { transform: translateX(-2px) rotate(-6deg); }
+  75%       { transform: translateX(2px)  rotate(6deg); }
+}
+
+/* "?" bubble bob */
+@keyframes questionBob {
+  0%, 100% { transform: translateX(-50%) translateY(0px); }
+  50%       { transform: translateX(-50%) translateY(-4px); }
+}
+
+/* ── Retro pixel-card panels ──────────────────────────────── */
+
+/* Hard 3-pixel drop shadow = instant retro game UI energy */
+.retro-card {
+  border: 2px solid #1D9E75;
+  box-shadow: 3px 3px 0 #085041;
+  border-radius: 3px;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.retro-card:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 #085041, 0 0 14px rgba(29,158,117,0.2);
+}
+
+.retro-card-amber {
+  border: 2px solid #EF9F27;
+  box-shadow: 3px 3px 0 #a65c00;
+  border-radius: 3px;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.retro-card-amber:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 #a65c00, 0 0 14px rgba(239,159,39,0.25);
+}
+
+.retro-card-purple {
+  border: 2px solid #7F77DD;
+  box-shadow: 3px 3px 0 #3d3a9e;
+  border-radius: 3px;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.retro-card-purple:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 #3d3a9e, 0 0 14px rgba(127,119,221,0.25);
+}

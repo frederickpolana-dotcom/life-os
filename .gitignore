@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-electron/
+release/
+*.log
+.env
+out/
+*.db
+*.db-shm
+*.db-wal

@@ -1,0 +1,26 @@
+appId: com.lifeos.app
+productName: Life OS
+directories:
+  output: dist-electron
+afterPack: scripts/afterPack.js
+win:
+  target:
+    - target: nsis
+    - target: zip
+  icon: public/icons/win/icon.ico
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+files:
+  - dist/**/*
+  - src/main/**/*
+  - package.json
+  - node_modules/**/*
+extraResources:
+  - from: public/
+    to: public/
+  - from: public/icons/
+    to: public/icons/
