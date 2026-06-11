@@ -24,12 +24,14 @@ export default function Dashboard({ awardXp, onOpenAI }) {
   const [dueTodayTasks, setDueTodayTasks]   = useState([])
   const [overdueTasks, setOverdueTasks]     = useState([])
   const [doneTaskIds, setDoneTaskIds]       = useState(new Set())
+  const [focusTask,   setFocusTask]         = useState(null)
+  const [focusCollapsed, setFocusCollapsed] = useState(false)
 
   useEffect(() => { if (window.electronAPI) loadAll() }, [])
 
   async function loadAll() {
     try {
-      const [epicRows, streakRows, logRows, taskStats, xpRow, todayRows, overdueRows] = await Promise.all([
+      const [epicRows, streakRows, logRows, taskStats, xpRow, todayRows, overdueRows, focusRow] = await Promise.all([
         window.electronAPI.db.query('SELECT * FROM epics ORDER BY updated_at DESC', []),
         window.electronAPI.db.query('SELECT * FROM streak_habits ORDER BY current_streak DESC', []),
         window.electronAPI.db.query("SELECT habit_id FROM streak_logs WHERE logged_date = date('now')", []),
@@ -45,6 +47,15 @@ export default function Dashboard({ awardXp, onOpenAI }) {
           "SELECT s.id, s.title, s.due_date, s.status, e.name as epic_name, e.color as epic_color, e.id as epic_id FROM subtasks s JOIN epics e ON e.id = s.epic_id WHERE s.due_date < date('now') AND s.status != 'done' ORDER BY s.due_date ASC",
           []
         ),
+        window.electronAPI.db.get(
+          `SELECT s.id, s.title, s.due_date,
+                  e.id as epic_id, e.name as epic_name, e.color as epic_color, e.end_date
+           FROM subtasks s JOIN epics e ON e.id = s.epic_id
+           WHERE s.status != 'done' AND e.status != 'done' AND s.parent_id IS NULL
+           ORDER BY CASE WHEN e.end_date IS NOT NULL THEN e.end_date ELSE '9999-12-31' END ASC, s.id ASC
+           LIMIT 1`,
+          []
+        ),
       ])
       setEpics(epicRows)
       setStreaks(streakRows)
@@ -57,6 +68,7 @@ export default function Dashboard({ awardXp, onOpenAI }) {
       })
       setDueTodayTasks(todayRows)
       setOverdueTasks(overdueRows)
+      setFocusTask(focusRow || null)
     } catch {}
   }
 
@@ -78,6 +90,20 @@ export default function Dashboard({ awardXp, onOpenAI }) {
       setDoneTaskIds(prev => new Set([...prev, taskId]))
       setDueTodayTasks(prev => prev.filter(t => t.id !== taskId))
       setOverdueTasks(prev => prev.filter(t => t.id !== taskId))
+      if (focusTask?.id === taskId) {
+        setFocusTask(null)
+        // Load the next most urgent task
+        const next = await window.electronAPI.db.get(
+          `SELECT s.id, s.title, s.due_date,
+                  e.id as epic_id, e.name as epic_name, e.color as epic_color, e.end_date
+           FROM subtasks s JOIN epics e ON e.id = s.epic_id
+           WHERE s.status != 'done' AND e.status != 'done' AND s.parent_id IS NULL AND s.id != ?
+           ORDER BY CASE WHEN e.end_date IS NOT NULL THEN e.end_date ELSE '9999-12-31' END ASC, s.id ASC
+           LIMIT 1`,
+          [taskId]
+        )
+        setFocusTask(next || null)
+      }
     } catch {}
   }
 
@@ -118,6 +144,49 @@ export default function Dashboard({ awardXp, onOpenAI }) {
         <StatCard label="Tasks Done"     value={`${stats.done_tasks}/${stats.total_tasks}`} color="amber"  icon="✅" />
         <StatCard label="Active Streaks" value={stats.active_streaks}                        color="purple" icon="🔥" />
         <StatCard label="Total XP"       value={stats.total_xp}                              color="teal"   icon="⭐" />
+      </div>
+
+      {/* Today's Focus */}
+      <div className="mb-6">
+        <button
+          onClick={() => setFocusCollapsed(c => !c)}
+          className="flex items-center gap-2 mb-3 w-full text-left group"
+        >
+          <span className="text-[15px]">🎯</span>
+          <h2 className="text-[15px] font-extrabold text-teal-dark group-hover:text-primary transition-colors">
+            Today's Focus
+          </h2>
+          {focusTask && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{ background: '#EF9F2720', color: '#EF9F27' }}>
+              1 task
+            </span>
+          )}
+          <svg
+            className="ml-auto transition-transform duration-200"
+            style={{ transform: focusCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', color: '#9bbdaa' }}
+            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        {!focusCollapsed && (
+          focusTask
+            ? <FocusCard task={focusTask} onDone={completeTask} />
+            : (
+              <div
+                className="px-5 py-4 flex items-center gap-3"
+                style={{ background: '#f4fdf8', border: '2px dashed #b3e8d3', borderRadius: 4 }}
+              >
+                <span className="text-[20px] opacity-40">📋</span>
+                <div>
+                  <p className="text-[12px] font-bold text-teal-dark">No open tasks yet</p>
+                  <p className="text-[11px] text-text-hint mt-0.5">Add tasks to your epics and they'll appear here.</p>
+                </div>
+              </div>
+            )
+        )}
       </div>
 
       {/* Today's Schedule */}
@@ -312,6 +381,56 @@ function DailyTaskRow({ task, onDone, urgent }) {
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
         </svg>
+      </button>
+    </div>
+  )
+}
+
+function FocusCard({ task, onDone }) {
+  const epicColor = EPIC_COLOR_HEX[task.epic_color] || '#1D9E75'
+  const deadlineDays = task.end_date ? daysUntil(task.end_date) : null
+  const urgency = deadlineDays !== null && deadlineDays <= 7  ? '#ef4444'
+                : deadlineDays !== null && deadlineDays <= 30 ? '#EF9F27'
+                : '#1D9E75'
+
+  return (
+    <div
+      className="flex items-center gap-4 px-5 py-4 bg-white bounce-in"
+      style={{
+        border: `2px solid ${urgency}`,
+        borderLeft: `5px solid ${urgency}`,
+        boxShadow: `3px 3px 0 ${urgency}40`,
+        borderRadius: 4,
+      }}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] font-extrabold text-teal-dark leading-snug">{task.title}</p>
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+            style={{ background: epicColor + '18', color: epicColor }}>
+            {task.epic_name}
+          </span>
+          {deadlineDays !== null && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+              style={{ background: urgency + '15', color: urgency }}>
+              {deadlineDays < 0
+                ? `Epic ${Math.abs(deadlineDays)}d overdue`
+                : deadlineDays === 0
+                ? 'Epic deadline today'
+                : `Epic deadline in ${deadlineDays}d`}
+            </span>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={() => onDone(task.id, task.epic_id)}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-white flex-shrink-0 game-btn"
+        style={{ background: urgency, border: `2px solid ${urgency}cc`, boxShadow: `2px 2px 0 ${urgency}80`, borderRadius: 4 }}
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+        Mark done
       </button>
     </div>
   )
