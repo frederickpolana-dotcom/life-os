@@ -1,21 +1,70 @@
 import React, { useEffect, useState } from 'react'
 import EpicCard from '../components/EpicCard'
 import Modal from '../components/Modal'
+import { presetToEndDate, endDateToHorizon, daysUntil } from '../utils/dates'
 
-const HORIZONS = [
-  { value: 'quarter',  label: 'This Quarter' },
-  { value: 'year',     label: 'This Year'    },
-  { value: 'longterm', label: 'Long Term'    },
-]
-const STATUSES = [
-  { value: 'not_started', label: 'Not Started' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'done',        label: 'Done'        },
-]
+const PRESETS = ['2 weeks', '1 month', '2 months', '3 months', '6 months', '1 year', 'long term', 'custom']
+
 const COLORS  = ['teal', 'amber', 'purple']
 const COLOR_HEX = { teal: '#1D9E75', amber: '#EF9F27', purple: '#7F77DD' }
 
-const DEFAULT_FORM = { name: '', description: '', horizon: 'quarter', status: 'not_started', color: 'teal', icon: 'bolt' }
+const inputCls = 'w-full px-3 py-2 text-[12px] bg-teal-pale border border-teal-border outline-none focus:border-primary text-text-pri placeholder:text-text-hint transition-colors'
+
+function TimeframePicker({ endDate, onChange }) {
+  const [selected, setSelected] = useState('3 months')
+
+  function pick(preset) {
+    setSelected(preset)
+    if (preset !== 'custom') {
+      const end = presetToEndDate(preset)
+      onChange(end, endDateToHorizon(end))
+    }
+  }
+
+  const displayEnd = endDate
+    ? new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : ''
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {PRESETS.map(p => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => pick(p)}
+            className="px-2.5 py-1 text-[10px] font-bold rounded transition-all"
+            style={{
+              background: selected === p ? '#1D9E75' : '#eefaf4',
+              color:      selected === p ? '#fff'    : '#0F6E56',
+              border:     selected === p ? '1.5px solid #085041' : '1.5px solid #d4f0e6',
+              boxShadow:  selected === p ? '2px 2px 0 #085041' : 'none',
+            }}
+          >
+            {p === 'long term' ? 'Long term' : p}
+          </button>
+        ))}
+      </div>
+      {selected === 'custom' && (
+        <input
+          type="date"
+          value={endDate}
+          onChange={e => onChange(e.target.value, endDateToHorizon(e.target.value))}
+          className={inputCls}
+          style={{ marginTop: 4 }}
+        />
+      )}
+      {endDate && selected !== 'custom' && (
+        <p className="text-[10px] text-text-muted mt-1">
+          → Ends <strong>{displayEnd}</strong>
+          {' '}({daysUntil(new Date(endDate))} days from today)
+        </p>
+      )}
+    </div>
+  )
+}
+
+const DEFAULT_FORM = { name: '', description: '', horizon: 'quarter', end_date: presetToEndDate('3 months'), status: 'not_started', color: 'teal', icon: 'bolt' }
 
 export default function Epics({ awardXp }) {
   const [epics, setEpics]   = useState([])
@@ -38,8 +87,8 @@ export default function Epics({ awardXp }) {
     setSaving(true)
     try {
       await window.electronAPI.db.run(
-        `INSERT INTO epics (name, description, icon, color, horizon, status, progress) VALUES (?,?,?,?,?,?,0)`,
-        [form.name.trim(), form.description.trim(), form.icon, form.color, form.horizon, form.status]
+        `INSERT INTO epics (name, description, icon, color, horizon, end_date, status, progress) VALUES (?,?,?,?,?,?,?,0)`,
+        [form.name.trim(), form.description.trim(), form.icon, form.color, form.horizon, form.end_date || null, form.status]
       )
       await awardXp(20)
       setAdding(false)
@@ -143,18 +192,12 @@ export default function Epics({ awardXp }) {
               className={inputCls + ' resize-none'}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Horizon">
-              <select value={form.horizon} onChange={e => setForm(f => ({ ...f, horizon: e.target.value }))} className={inputCls}>
-                {HORIZONS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
-                {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </Field>
-          </div>
+          <Field label="Timeframe">
+            <TimeframePicker
+              endDate={form.end_date}
+              onChange={(end_date, horizon) => setForm(f => ({ ...f, end_date, horizon }))}
+            />
+          </Field>
           <Field label="Color">
             <div className="flex gap-3 items-center">
               {COLORS.map(c => (
@@ -209,5 +252,3 @@ function Field({ label, children }) {
     </div>
   )
 }
-
-const inputCls = 'w-full px-3 py-2 text-[12px] bg-teal-pale border border-teal-border outline-none focus:border-primary text-text-pri placeholder:text-text-hint transition-colors'

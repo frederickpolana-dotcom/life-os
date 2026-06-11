@@ -5,6 +5,7 @@ import ProgressBar from '../components/ProgressBar'
 import StatusPill from '../components/StatusPill'
 import Modal from '../components/Modal'
 import ConfettiCelebration from '../components/ConfettiCelebration'
+import { getHorizonDeadline, getQuarterLabel, daysUntil, fmtDate, fmtDateFull, deadlineColor, presetToEndDate, endDateToHorizon } from '../utils/dates'
 
 const HORIZONS = [
   { value: 'quarter',  label: 'This Quarter' },
@@ -32,7 +33,8 @@ export default function EpicDetail({ awardXp }) {
   const [epic, setEpic]         = useState(null)
   const [tasks, setTasks]       = useState([])
   const [addingTask, setAddingTask] = useState(false)
-  const [newTitle, setNewTitle] = useState('')
+  const [newTitle, setNewTitle]   = useState('')
+  const [newDueDate, setNewDueDate] = useState('')
   const [editing, setEditing]   = useState(false)
   const [editForm, setEditForm] = useState({})
   const [confetti, setConfetti] = useState(0)
@@ -54,10 +56,11 @@ export default function EpicDetail({ awardXp }) {
     const title = newTitle.trim()
     if (!title) return
     await window.electronAPI.db.run(
-      'INSERT INTO subtasks (epic_id, title, status) VALUES (?, ?, ?)',
-      [id, title, 'not_started']
+      'INSERT INTO subtasks (epic_id, title, status, due_date) VALUES (?, ?, ?, ?)',
+      [id, title, 'not_started', newDueDate || null]
     )
     setNewTitle('')
+    setNewDueDate('')
     setAddingTask(false)
     await load()
     await recalcProgress()
@@ -97,16 +100,24 @@ export default function EpicDetail({ awardXp }) {
   }
 
   function openEdit() {
-    setEditForm({ name: epic.name, description: epic.description || '', status: epic.status, horizon: epic.horizon, color: epic.color })
+    setEditForm({ name: epic.name, description: epic.description || '', status: epic.status, horizon: epic.horizon, color: epic.color, end_date: epic.end_date || '' })
     setEditing(true)
   }
 
   async function saveEdit() {
     if (!editForm.name.trim()) return
-    await window.electronAPI.db.run(
-      'UPDATE epics SET name = ?, description = ?, status = ?, horizon = ?, color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [editForm.name.trim(), editForm.description.trim(), editForm.status, editForm.horizon, editForm.color, id]
-    )
+    try {
+      await window.electronAPI.db.run(
+        'UPDATE epics SET name = ?, description = ?, status = ?, horizon = ?, color = ?, end_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [editForm.name.trim(), editForm.description.trim(), editForm.status, editForm.horizon, editForm.color, editForm.end_date || null, id]
+      )
+    } catch {
+      // end_date column may not exist yet — save without it
+      await window.electronAPI.db.run(
+        'UPDATE epics SET name = ?, description = ?, status = ?, horizon = ?, color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [editForm.name.trim(), editForm.description.trim(), editForm.status, editForm.horizon, editForm.color, id]
+      )
+    }
     setEditing(false)
     await load()
   }
@@ -195,10 +206,37 @@ export default function EpicDetail({ awardXp }) {
 
         <ProgressBar value={epic.progress} color={color} className="mb-2" />
 
-        <div className="flex items-center justify-between">
-          <span className="text-[11px]" style={{ color: C.text, opacity: 0.6 }}>{done}/{total} tasks · {epic.horizon}</span>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px]" style={{ color: C.text, opacity: 0.6 }}>{done}/{total} tasks</span>
           <span className="text-[12px] font-extrabold" style={{ color: C.text }}>{epic.progress}%</span>
         </div>
+
+        {/* Deadline row */}
+        {epic.status !== 'done' && (() => {
+          const deadline = getHorizonDeadline(epic.horizon, epic.end_date)
+          if (!deadline) return null
+          const days  = daysUntil(deadline)
+          const color = deadlineColor(days)
+          let rangeLabel = ''
+          if (epic.horizon === 'quarter') {
+            const qEnd = getQuarterLabel(deadline)
+            const qStart = new Date(deadline.getFullYear(), Math.floor(deadline.getMonth() / 3) * 3, 1)
+            rangeLabel = `${qEnd}  ·  ${fmtDate(qStart)} → ${fmtDate(deadline)}`
+          } else if (epic.horizon === 'year') {
+            rangeLabel = `${deadline.getFullYear()}  ·  Jan 1 → Dec 31`
+          } else {
+            rangeLabel = `Long Term  ·  target ${fmtDateFull(deadline)}`
+          }
+          const daysLabel = days < 0 ? `${Math.abs(days)} days overdue!` : days === 0 ? 'Due today!' : `${days} days remaining`
+          return (
+            <div className="flex items-center gap-3 flex-wrap mt-1 pt-2" style={{ borderTop: `1px solid ${color}30` }}>
+              <span className="text-[10px] font-bold" style={{ color: C.text, opacity: 0.5 }}>{rangeLabel}</span>
+              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full" style={{ background: color + '1a', color }}>
+                ⏱ {daysLabel}
+              </span>
+            </div>
+          )
+        })()}
 
         {/* Mark complete button */}
         {epic.status !== 'done' && (
@@ -264,19 +302,31 @@ export default function EpicDetail({ awardXp }) {
       </div>
 
       {/* Add task modal */}
-      <Modal open={addingTask} onClose={() => { setAddingTask(false); setNewTitle('') }} title="Add Task" width={420}>
-        <input
-          autoFocus
-          value={newTitle}
-          onChange={e => setNewTitle(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addTask()}
-          placeholder="Task title…"
-          className="w-full px-3 py-2 text-[12px] bg-teal-pale border border-teal-border outline-none focus:border-primary text-text-pri placeholder:text-text-hint"
-          style={{ borderRadius: 4 }}
-        />
+      <Modal open={addingTask} onClose={() => { setAddingTask(false); setNewTitle(''); setNewDueDate('') }} title="Add Task" width={420}>
+        <div className="flex flex-col gap-3">
+          <input
+            autoFocus
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addTask()}
+            placeholder="Task title…"
+            className="w-full px-3 py-2 text-[12px] bg-teal-pale border border-teal-border outline-none focus:border-primary text-text-pri placeholder:text-text-hint"
+            style={{ borderRadius: 4 }}
+          />
+          <div>
+            <label className="block text-[10px] font-bold text-text-muted uppercase tracking-wide mb-1.5">Due Date <span className="font-normal normal-case">(optional)</span></label>
+            <input
+              type="date"
+              value={newDueDate}
+              onChange={e => setNewDueDate(e.target.value)}
+              className="w-full px-3 py-2 text-[12px] bg-teal-pale border border-teal-border outline-none focus:border-primary text-text-pri"
+              style={{ borderRadius: 4 }}
+            />
+          </div>
+        </div>
         <div className="flex justify-end gap-3 mt-4">
           <button
-            onClick={() => { setAddingTask(false); setNewTitle('') }}
+            onClick={() => { setAddingTask(false); setNewTitle(''); setNewDueDate('') }}
             className="px-4 py-2 text-[12px] font-bold text-text-muted hover:text-teal-dark transition-colors"
           >
             Cancel
@@ -312,18 +362,17 @@ export default function EpicDetail({ awardXp }) {
               className={inputCls + ' resize-none'}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Horizon">
-              <select value={editForm.horizon || 'quarter'} onChange={e => setEditForm(f => ({ ...f, horizon: e.target.value }))} className={inputCls}>
-                {HORIZONS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select value={editForm.status || 'not_started'} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
-                {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </Field>
-          </div>
+          <Field label="Timeframe">
+            <TimeframePicker
+              endDate={editForm.end_date || ''}
+              onChange={(end_date, horizon) => setEditForm(f => ({ ...f, end_date, horizon }))}
+            />
+          </Field>
+          <Field label="Status">
+            <select value={editForm.status || 'not_started'} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
+              {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </Field>
           <Field label="Color">
             <div className="flex gap-3 items-center">
               {COLORS.map(c => (
@@ -357,6 +406,73 @@ export default function EpicDetail({ awardXp }) {
           </button>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+const PRESETS = ['2 weeks', '1 month', '2 months', '3 months', '6 months', '1 year', 'long term', 'custom']
+
+function TimeframePicker({ endDate, onChange }) {
+  const [selected, setSelected] = React.useState(() => {
+    if (!endDate) return '3 months'
+    // Try to match existing end_date to a preset
+    const today = Date.now()
+    const diff = Math.round((new Date(endDate) - today) / 86400000)
+    if (diff >= 13 && diff <= 15) return '2 weeks'
+    if (diff >= 28 && diff <= 32) return '1 month'
+    if (diff >= 58 && diff <= 62) return '2 months'
+    if (diff >= 88 && diff <= 92) return '3 months'
+    if (diff >= 180 && diff <= 184) return '6 months'
+    if (diff >= 363 && diff <= 367) return '1 year'
+    if (diff > 700) return 'long term'
+    return 'custom'
+  })
+
+  function pick(preset) {
+    setSelected(preset)
+    if (preset !== 'custom') {
+      const end = presetToEndDate(preset)
+      onChange(end, endDateToHorizon(end))
+    }
+  }
+
+  const displayEnd = endDate ? new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {PRESETS.map(p => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => pick(p)}
+            className="px-2.5 py-1 text-[10px] font-bold rounded transition-all"
+            style={{
+              background: selected === p ? '#1D9E75' : '#eefaf4',
+              color:      selected === p ? '#fff'    : '#0F6E56',
+              border:     selected === p ? '1.5px solid #085041' : '1.5px solid #d4f0e6',
+              boxShadow:  selected === p ? '2px 2px 0 #085041' : 'none',
+            }}
+          >
+            {p === 'long term' ? 'Long term' : p}
+          </button>
+        ))}
+      </div>
+      {selected === 'custom' && (
+        <input
+          type="date"
+          value={endDate}
+          onChange={e => onChange(e.target.value, endDateToHorizon(e.target.value))}
+          className={inputCls}
+          style={{ marginTop: 4 }}
+        />
+      )}
+      {endDate && selected !== 'custom' && (
+        <p className="text-[10px] text-text-muted mt-1">
+          → Ends <strong>{displayEnd}</strong>
+          {' '}({daysUntil(new Date(endDate))} days from today)
+        </p>
+      )}
     </div>
   )
 }

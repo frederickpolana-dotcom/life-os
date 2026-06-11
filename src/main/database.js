@@ -158,6 +158,9 @@ function initSchema() {
     );
   `)
 
+  // Migrations for existing DBs
+  try { db.exec('ALTER TABLE epics ADD COLUMN end_date DATE') } catch {}
+
   seedIfEmpty()
 }
 

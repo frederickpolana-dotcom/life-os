@@ -4,6 +4,7 @@ import EpicCard from '../components/EpicCard'
 import ProgressBar from '../components/ProgressBar'
 import ConfettiCelebration from '../components/ConfettiCelebration'
 import { WalkingMario } from '../components/MarioSprite'
+import { fmtDate, daysUntil } from '../utils/dates'
 
 const HORIZON_TABS = [
   { key: 'all',     label: 'All' },
@@ -20,22 +21,30 @@ export default function Dashboard({ awardXp, onOpenAI }) {
   const [horizonTab, setHorizonTab]   = useState('all')
   const [confetti, setConfetti]        = useState(0)
   const [stats, setStats]              = useState({ total_tasks: 0, done_tasks: 0, active_streaks: 0, total_xp: 0 })
+  const [dueTodayTasks, setDueTodayTasks]   = useState([])
+  const [overdueTasks, setOverdueTasks]     = useState([])
+  const [doneTaskIds, setDoneTaskIds]       = useState(new Set())
 
   useEffect(() => { if (window.electronAPI) loadAll() }, [])
 
   async function loadAll() {
     try {
-      const [epicRows, streakRows, logRows, taskStats, xpRow] = await Promise.all([
+      const [epicRows, streakRows, logRows, taskStats, xpRow, todayRows, overdueRows] = await Promise.all([
         window.electronAPI.db.query('SELECT * FROM epics ORDER BY updated_at DESC', []),
         window.electronAPI.db.query('SELECT * FROM streak_habits ORDER BY current_streak DESC', []),
+        window.electronAPI.db.query("SELECT habit_id FROM streak_logs WHERE logged_date = date('now')", []),
         window.electronAPI.db.query(
-          "SELECT habit_id FROM streak_logs WHERE logged_date = date('now')", []
-        ),
-        window.electronAPI.db.query(
-          "SELECT COUNT(*) as total_tasks, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done_tasks FROM subtasks WHERE parent_id IS NULL",
-          []
+          "SELECT COUNT(*) as total_tasks, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done_tasks FROM subtasks WHERE parent_id IS NULL", []
         ),
         window.electronAPI.settings.get('xp_total'),
+        window.electronAPI.db.query(
+          "SELECT s.id, s.title, s.due_date, s.status, e.name as epic_name, e.color as epic_color, e.id as epic_id FROM subtasks s JOIN epics e ON e.id = s.epic_id WHERE s.due_date = date('now') AND s.status != 'done' ORDER BY s.id",
+          []
+        ),
+        window.electronAPI.db.query(
+          "SELECT s.id, s.title, s.due_date, s.status, e.name as epic_name, e.color as epic_color, e.id as epic_id FROM subtasks s JOIN epics e ON e.id = s.epic_id WHERE s.due_date < date('now') AND s.status != 'done' ORDER BY s.due_date ASC",
+          []
+        ),
       ])
       setEpics(epicRows)
       setStreaks(streakRows)
@@ -46,6 +55,29 @@ export default function Dashboard({ awardXp, onOpenAI }) {
         active_streaks: streakRows.filter(s => s.current_streak > 0).length,
         total_xp:       Number(xpRow) || 0,
       })
+      setDueTodayTasks(todayRows)
+      setOverdueTasks(overdueRows)
+    } catch {}
+  }
+
+  async function completeTask(taskId, epicId) {
+    try {
+      await window.electronAPI.db.run(
+        'UPDATE subtasks SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['done', taskId]
+      )
+      // Recalc epic progress
+      const rows = await window.electronAPI.db.query(
+        "SELECT COUNT(*) as total, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done FROM subtasks WHERE epic_id = ? AND parent_id IS NULL",
+        [epicId]
+      )
+      const pct = rows[0]?.total > 0 ? Math.round((rows[0].done / rows[0].total) * 100) : 0
+      await window.electronAPI.db.run('UPDATE epics SET progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [pct, epicId])
+      const result = await awardXp(15)
+      if (result?.levelUp) setConfetti(c => c + 1)
+      setDoneTaskIds(prev => new Set([...prev, taskId]))
+      setDueTodayTasks(prev => prev.filter(t => t.id !== taskId))
+      setOverdueTasks(prev => prev.filter(t => t.id !== taskId))
     } catch {}
   }
 
@@ -87,6 +119,54 @@ export default function Dashboard({ awardXp, onOpenAI }) {
         <StatCard label="Active Streaks" value={stats.active_streaks}                        color="purple" icon="🔥" />
         <StatCard label="Total XP"       value={stats.total_xp}                              color="teal"   icon="⭐" />
       </div>
+
+      {/* Today's Schedule */}
+      {(dueTodayTasks.length > 0 || overdueTasks.length > 0) && (
+        <div className="mb-6 p-5 bg-white bounce-in" style={{ border: '2px solid #1D9E75', boxShadow: '3px 3px 0 #085041', borderRadius: 4 }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[15px]">📅</span>
+              <h2 className="text-[15px] font-extrabold text-teal-dark">Today's Schedule</h2>
+              {dueTodayTasks.length > 0 && (
+                <span className="text-[10px] font-bold bg-primary text-white px-2 py-0.5 rounded-full">{dueTodayTasks.length} due</span>
+              )}
+            </div>
+            {overdueTasks.length > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#ef4444', border: '1px solid #fecaca' }}>
+                ⚠️ {overdueTasks.length} overdue (bolos)
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Due Today */}
+            <div>
+              <p className="text-[10px] font-bold text-text-muted uppercase tracking-wide mb-2">
+                Due Today
+              </p>
+              {dueTodayTasks.length === 0
+                ? <p className="text-[11px] text-text-hint py-2">Nothing due today 🎉</p>
+                : dueTodayTasks.map(task => (
+                  <DailyTaskRow key={task.id} task={task} onDone={completeTask} urgent={false} />
+                ))
+              }
+            </div>
+
+            {/* Overdue / Bolos */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: overdueTasks.length > 0 ? '#ef4444' : '#9bbdaa' }}>
+                Overdue / Bolos
+              </p>
+              {overdueTasks.length === 0
+                ? <p className="text-[11px] text-text-hint py-2">No overdue tasks 💪</p>
+                : overdueTasks.map(task => (
+                  <DailyTaskRow key={task.id} task={task} onDone={completeTask} urgent={true} />
+                ))
+              }
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-[1fr_280px] gap-6">
         {/* Left: Epics */}
@@ -189,6 +269,50 @@ function StatCard({ label, value, color, icon }) {
           {icon}
         </span>
       )}
+    </div>
+  )
+}
+
+const EPIC_COLOR_HEX = { teal: '#1D9E75', amber: '#EF9F27', purple: '#7F77DD' }
+
+function DailyTaskRow({ task, onDone, urgent }) {
+  const days     = task.due_date ? daysUntil(task.due_date) : 0
+  const overdue  = days < 0
+  const accentColor = urgent ? '#ef4444' : '#1D9E75'
+  const epicColor   = EPIC_COLOR_HEX[task.epic_color] || '#1D9E75'
+
+  return (
+    <div
+      className="flex items-center gap-2 mb-2 px-3 py-2 bg-white hover-lift"
+      style={{
+        border: `1.5px solid ${urgent ? '#fecaca' : '#d4f0e6'}`,
+        borderLeft: `3px solid ${accentColor}`,
+        borderRadius: 4,
+      }}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-bold text-teal-dark truncate">{task.title}</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: epicColor + '18', color: epicColor }}>
+            {task.epic_name}
+          </span>
+          {task.due_date && (
+            <span className="text-[9px] font-bold" style={{ color: accentColor }}>
+              {overdue ? `${Math.abs(days)}d late` : fmtDate(task.due_date)}
+            </span>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={() => onDone(task.id, task.epic_id)}
+        className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all game-btn"
+        title="Mark done (+15 XP)"
+        style={{ background: accentColor + '18', border: `1.5px solid ${accentColor}`, color: accentColor }}
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </button>
     </div>
   )
 }

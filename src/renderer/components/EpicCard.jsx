@@ -2,8 +2,37 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import ProgressBar from './ProgressBar'
 import StatusPill from './StatusPill'
+import { getHorizonDeadline, getQuarterLabel, daysUntil, fmtDate, deadlineColor } from '../utils/dates'
 
-const HORIZON_LABELS = { quarter: 'This Quarter', year: 'This Year', longterm: 'Long Term' }
+function DeadlineBadge({ horizon, endDate }) {
+  if (horizon === 'done') return null
+  const deadline = getHorizonDeadline(horizon, endDate)
+  if (!deadline) return null
+  const days  = daysUntil(deadline)
+  const color = deadlineColor(days)
+
+  let label = ''
+  if (horizon === 'quarter') label = getQuarterLabel(deadline)
+  else if (horizon === 'year') label = `${deadline.getFullYear()}`
+  else label = 'Long Term'
+
+  const daysLabel = days < 0
+    ? `${Math.abs(days)}d overdue`
+    : days === 0
+    ? 'due today'
+    : `${days}d left`
+
+  return (
+    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: color + '18', color }}>
+        {label}
+      </span>
+      <span className="text-[10px] font-bold" style={{ color }}>
+        {fmtDate(deadline)} · {daysLabel}
+      </span>
+    </div>
+  )
+}
 
 export default function EpicCard({ epic }) {
   const navigate = useNavigate()
@@ -25,9 +54,13 @@ export default function EpicCard({ epic }) {
       <ProgressBar value={epic.progress} color={epic.color} className="mb-2" />
 
       <div className="flex items-center justify-between">
-        <span className="text-[11px] text-text-hint font-medium">{HORIZON_LABELS[epic.horizon] || epic.horizon}</span>
         <span className="text-[11px] font-extrabold text-primary">{epic.progress}%</span>
       </div>
+
+      {epic.status !== 'done' && <DeadlineBadge horizon={epic.horizon} endDate={epic.end_date} />}
+      {epic.status === 'done' && (
+        <span className="text-[10px] font-bold text-green-done mt-1.5 inline-block">🏆 Completed</span>
+      )}
     </div>
   )
 }
