@@ -8,12 +8,18 @@ const COLOR_MAP = {
 
 export default function ProgressBar({ value = 0, color = 'teal', className = '' }) {
   const barColor = COLOR_MAP[color] || 'bg-primary'
+  const pct = Math.min(100, Math.max(0, value))
   return (
-    <div className={`w-full h-2 bg-teal-light rounded-full overflow-hidden ${className}`}>
-      <div
-        className={`h-full rounded-full progress-fill ${barColor}`}
-        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-      />
+    <div className={`w-full ${className}`}>
+      <div className="w-full h-2 bg-teal-border rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full progress-fill ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {pct === 0 && (
+        <span className="text-[10px] font-bold text-text-hint mt-0.5 block">0%</span>
+      )}
     </div>
   )
 }
