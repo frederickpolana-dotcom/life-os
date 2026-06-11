@@ -7,6 +7,7 @@ import XPToast from './components/XPToast'
 import ConfettiCelebration from './components/ConfettiCelebration'
 import Dashboard from './pages/Dashboard'
 import Daily from './pages/Daily'
+import Calendar from './pages/Calendar'
 import Epics from './pages/Epics'
 import EpicDetail from './pages/EpicDetail'
 import Streaks from './pages/Streaks'
@@ -171,6 +172,7 @@ export default function App() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard"  element={<Dashboard awardXp={(n) => awardXp(n, 'streak')} onOpenAI={() => setAiOpen(true)} />} />
               <Route path="/daily"      element={<Daily     awardXp={(n) => awardXp(n, 'streak')} />} />
+              <Route path="/calendar"  element={<Calendar  awardXp={(n) => awardXp(n, 'streak')} />} />
               <Route path="/epics"      element={<Epics awardXp={(n) => awardXp(n, 'epic')} />} />
               <Route path="/epics/:id"  element={<EpicDetail awardXp={(n) => awardXp(n, 'complete')} />} />
               <Route path="/streaks"    element={<Streaks awardXp={(n) => awardXp(n, 'streak')} />} />
