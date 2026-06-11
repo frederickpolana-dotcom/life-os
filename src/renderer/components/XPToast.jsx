@@ -9,12 +9,14 @@ export default function XPToast({ toasts, onRemove }) {
 }
 
 function ToastItem({ toast, onDone }) {
-  const [phase, setPhase] = useState('enter')
+  const [phase, setPhase] = useState('idle')
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('exit'), 800)
-    const t2 = setTimeout(() => onDone(), 1100)
-    return () => { clearTimeout(t1); clearTimeout(t2) }
+    // idle → enter on next frame so CSS transition has a start state to animate from
+    const raf = requestAnimationFrame(() => setPhase('enter'))
+    const t1  = setTimeout(() => setPhase('exit'), 1700)
+    const t2  = setTimeout(() => onDone(), 2000)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
   const COLOR = {
@@ -23,12 +25,20 @@ function ToastItem({ toast, onDone }) {
     level:  'bg-purple text-white',
   }[toast.type] || 'bg-primary text-white'
 
+  const STYLES = {
+    idle:  { opacity: 0, transform: 'scale(0.6) translateY(10px)' },
+    enter: { opacity: 1, transform: 'scale(1) translateY(0)' },
+    exit:  { opacity: 0, transform: 'scale(0.85) translateY(-8px)' },
+  }
+
   return (
     <div
-      className={`px-3 py-1.5 rounded-full text-[12px] font-extrabold shadow-lg ${COLOR} transition-all duration-300 ${
-        phase === 'enter' ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
-      }`}
-      style={{ transform: phase === 'enter' ? 'translateY(0)' : 'translateY(-16px)' }}
+      className={`px-3 py-1.5 rounded-full text-[12px] font-extrabold shadow-lg ${COLOR}`}
+      style={{
+        transition: 'opacity 0.22s ease, transform 0.22s cubic-bezier(0.34,1.56,0.64,1)',
+        transformOrigin: 'center bottom',
+        ...STYLES[phase],
+      }}
     >
       {toast.text}
     </div>
