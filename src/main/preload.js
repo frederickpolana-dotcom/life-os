@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getApiKey:        (provider)   => ipcRenderer.invoke('settings:getApiKey',   provider),
     setApiKey:        (provider, plaintext) => ipcRenderer.invoke('settings:setApiKey', provider, plaintext),
   },
+  files: {
+    readDocument: () => ipcRenderer.invoke('files:readDocument'),
+  },
   system: {
     setLoginItem: (enabled)  => ipcRenderer.invoke('system:setLoginItem', enabled),
     exportData:   ()         => ipcRenderer.invoke('system:exportData'),

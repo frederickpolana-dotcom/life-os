@@ -216,6 +216,29 @@ ipcMain.handle('system:exportData', async () => {
   }
 })
 
+ipcMain.handle('files:readDocument', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title:      'Attach Document',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Text / Code', extensions: ['txt', 'md', 'csv', 'json', 'js', 'ts', 'jsx', 'tsx', 'py', 'html', 'css', 'xml', 'yaml', 'yml', 'log'] },
+      { name: 'All Files',   extensions: ['*'] },
+    ],
+  })
+  if (result.canceled || !result.filePaths.length) return null
+  const filePath = result.filePaths[0]
+  try {
+    const stats = fs.statSync(filePath)
+    if (stats.size > 120 * 1024) {
+      return { error: `File too large (${Math.round(stats.size / 1024)} KB). Max 120 KB.` }
+    }
+    const content = fs.readFileSync(filePath, 'utf-8')
+    return { name: path.basename(filePath), content, size: stats.size }
+  } catch {
+    return { error: 'Could not read file — make sure it is a plain-text file.' }
+  }
+})
+
 // ── IPC: widget controls ──────────────────────────────────────────────────────
 ipcMain.handle('widget:open-main', () => {
   mainWindow.show()

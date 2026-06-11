@@ -142,6 +142,7 @@ export default function AIPanel({ open, onClose, playSound }) {
   const [model, setModel]             = useState('claude-sonnet-4-20250514')
   const [ollamaUrl, setOllamaUrl]     = useState('http://localhost:11434')
   const [ollamaModel, setOllamaModel] = useState('llama3')
+  const [attachedDoc, setAttachedDoc] = useState(null) // { name, content }
   const bottomRef          = useRef(null)
   const hasLoadedHistory   = useRef(false)
 
@@ -319,6 +320,17 @@ export default function AIPanel({ open, onClose, playSound }) {
     }
   }
 
+  async function pickDocument() {
+    if (!window.electronAPI?.files) return
+    const result = await window.electronAPI.files.readDocument()
+    if (!result) return
+    if (result.error) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `⚠ ${result.error}`, actionResult: null }])
+      return
+    }
+    setAttachedDoc({ name: result.name, content: result.content })
+  }
+
   async function send() {
     const text = input.trim()
     if (!text || loading) return
@@ -330,12 +342,16 @@ export default function AIPanel({ open, onClose, playSound }) {
 
     try {
       const systemPrompt = await buildSystemPrompt()
+      const docContext = attachedDoc
+        ? `\n\n== ATTACHED DOCUMENT: ${attachedDoc.name} ==\n${attachedDoc.content}\n== END DOCUMENT ==\n\nThe user may ask questions about this document. Reference it accurately.`
+        : ''
+      const fullSystemPrompt = systemPrompt + docContext
       const apiMessages  = history.map(m => ({ role: m.role, content: m.content }))
       const effectiveModel   = provider === 'ollama' ? ollamaModel : model
       const effectiveEndpoint = provider === 'ollama' ? ollamaUrl   : undefined
 
       const raw = await window.electronAPI.ai.chat(
-        apiMessages, provider, effectiveModel, effectiveEndpoint, systemPrompt
+        apiMessages, provider, effectiveModel, effectiveEndpoint, fullSystemPrompt
       )
 
       playSound?.('message')
@@ -452,7 +468,38 @@ export default function AIPanel({ open, onClose, playSound }) {
 
       {/* Input */}
       <div className="px-3 pb-3 pt-2 border-t border-teal-border">
+        {/* Attached doc badge */}
+        {attachedDoc && (
+          <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-[8px]"
+            style={{ background: '#fff8ec', border: '1.5px solid #EF9F2760' }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#EF9F27" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+            <span className="text-[10px] font-bold text-amber-dark flex-1 truncate">{attachedDoc.name}</span>
+            <span className="text-[9px] text-text-hint">in context</span>
+            <button
+              onClick={() => setAttachedDoc(null)}
+              className="ml-1 text-text-hint hover:text-red-400 transition-colors"
+              title="Remove attachment"
+            >
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        )}
         <div className="flex gap-2">
+          {/* Paperclip */}
+          <button
+            onClick={pickDocument}
+            title="Attach a document (.txt, .md, .csv, .json, .py…)"
+            className="w-8 h-8 rounded-[10px] flex items-center justify-center transition-colors hover:bg-teal-light"
+            style={{ color: attachedDoc ? '#EF9F27' : '#9bbdaa', border: `1.5px solid ${attachedDoc ? '#EF9F2780' : '#d4f0e6'}` }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
