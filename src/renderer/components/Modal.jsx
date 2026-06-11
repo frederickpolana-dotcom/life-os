@@ -17,7 +17,7 @@ export default function Modal({ open, onClose, title, children, width = 480 }) {
 
       {/* Panel */}
       <div
-        className="relative bg-white flex flex-col max-h-[90vh]"
+        className="relative bg-white flex flex-col max-h-[90vh] pop-in"
         style={{ width, border: '2px solid #1D9E75', boxShadow: '5px 5px 0 #085041', borderRadius: 4 }}
       >
         {/* Header */}

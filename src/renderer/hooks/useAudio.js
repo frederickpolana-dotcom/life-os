@@ -295,5 +295,20 @@ export function useAudio() {
     [392, 523, 659, 784].forEach((f, i) => sfx(f, 0.12, 'square', 0.10, i * 0.10))
   }, [])
 
-  return { playComplete, playStreakLog, playLevelUp, playMessage, playEpicCreate, startBGM, stopBGM }
+  // UI interaction sounds
+  const playClick  = useCallback(() => sfx(880, 0.028, 'square', 0.055), [])
+  const playNav    = useCallback(() => {
+    sfx(659, 0.035, 'square', 0.065, 0)
+    sfx(784, 0.055, 'square', 0.065, 0.038)
+  }, [])
+  const playDelete = useCallback(() => {
+    sfx(370, 0.045, 'square', 0.09, 0)
+    sfx(220, 0.10,  'square', 0.09, 0.048)
+  }, [])
+  const playOpen   = useCallback(() => {
+    sfx(523, 0.04, 'square', 0.07, 0)
+    sfx(659, 0.06, 'square', 0.07, 0.04)
+  }, [])
+
+  return { playComplete, playStreakLog, playLevelUp, playMessage, playEpicCreate, playClick, playNav, playDelete, playOpen, startBGM, stopBGM }
 }

@@ -123,8 +123,8 @@ export default function Streaks({ awardXp }) {
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        {habits.map(habit => (
-          <div key={habit.id} className="relative group">
+        {habits.map((habit, i) => (
+          <div key={habit.id} className="relative group bounce-in" style={{ animationDelay: `${i * 0.05}s` }}>
             <StreakCard
               habit={habit}
               todayLogged={todayLogs.has(habit.id)}

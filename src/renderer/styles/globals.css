@@ -108,14 +108,44 @@ html, body, #root {
   background-size: 22px 22px;
 }
 
+/* Ripple click effect */
+@keyframes ripple {
+  to { transform: scale(4); opacity: 0; }
+}
+.ripple-span {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.32);
+  transform: scale(0);
+  animation: ripple 0.55s linear forwards;
+  pointer-events: none;
+}
+button, [role="button"] {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Bounce-in for newly added items */
+@keyframes bounceIn {
+  0%   { opacity: 0; transform: scale(0.55) translateY(10px); }
+  55%  { opacity: 1; transform: scale(1.07) translateY(-4px); }
+  80%  { transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.bounce-in { animation: bounceIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
 /* Retro press effect on buttons */
 .game-btn {
-  box-shadow: 0 4px 0 rgba(8,80,65,0.22);
-  transition: transform 0.07s, box-shadow 0.07s;
+  box-shadow: 0 4px 0 rgba(8,80,65,0.28);
+  transition: transform 0.06s, box-shadow 0.06s, filter 0.06s;
+}
+.game-btn:hover {
+  filter: brightness(1.08);
 }
 .game-btn:active {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 rgba(8,80,65,0.22);
+  transform: translateY(4px) scale(0.96);
+  box-shadow: 0 0px 0 rgba(8,80,65,0.28);
+  filter: brightness(0.94);
 }
 
 /* Soft glow on primary elements */
@@ -198,3 +228,33 @@ html, body, #root {
   transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0 #3d3a9e, 0 0 14px rgba(127,119,221,0.25);
 }
+
+/* Active click press for retro cards */
+.retro-card:active       { transform: translate(1px, 1px) !important; box-shadow: 1px 1px 0 #085041 !important; }
+.retro-card-amber:active { transform: translate(1px, 1px) !important; box-shadow: 1px 1px 0 #a65c00 !important; }
+.retro-card-purple:active{ transform: translate(1px, 1px) !important; box-shadow: 1px 1px 0 #3d3a9e !important; }
+
+/* Modal / panel pop-in */
+@keyframes popIn {
+  0%   { opacity: 0; transform: scale(0.88) translateY(8px); }
+  70%  { transform: scale(1.03) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.pop-in { animation: popIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* Hover lift for interactive rows/cards */
+.hover-lift {
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(29,158,117,0.12);
+}
+
+/* Pulse ring on XP award */
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0 rgba(29,158,117,0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(29,158,117,0); }
+  100% { box-shadow: 0 0 0 0 rgba(29,158,117,0); }
+}
+.pulse-ring { animation: pulseRing 0.6s ease-out; }

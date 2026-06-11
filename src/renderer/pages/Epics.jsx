@@ -102,7 +102,11 @@ export default function Epics({ awardXp }) {
 
       {/* Grid */}
       <div className="grid grid-cols-2 gap-4">
-        {visible.map(epic => <EpicCard key={epic.id} epic={epic} />)}
+        {visible.map((epic, i) => (
+          <div key={epic.id} className="bounce-in" style={{ animationDelay: `${i * 0.05}s` }}>
+            <EpicCard epic={epic} />
+          </div>
+        ))}
         {visible.length === 0 && (
           <div className="col-span-2 py-16 flex flex-col items-center gap-3">
             <span className="text-[40px] select-none opacity-30">⚔️</span>

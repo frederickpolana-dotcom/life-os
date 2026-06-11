@@ -57,6 +57,30 @@ export default function App() {
     if (window.electronAPI) loadProfile()
   }, [])
 
+  // Global click sound + ripple on every button press
+  useEffect(() => {
+    function onMouseDown(e) {
+      const el = e.target.closest('button, [role="button"]')
+      if (!el || el.disabled) return
+
+      // Ripple
+      const rect = el.getBoundingClientRect()
+      const size = Math.max(rect.width, rect.height) * 1.8
+      const x    = e.clientX - rect.left  - size / 2
+      const y    = e.clientY - rect.top   - size / 2
+      const span = document.createElement('span')
+      span.className = 'ripple-span'
+      span.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`
+      el.appendChild(span)
+      setTimeout(() => span.remove(), 600)
+
+      // Click sound (skip on music toggle to avoid interrupting BGM flow)
+      if (!el.dataset.noclick) audio.playClick?.()
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [audio])
+
   function addToast(text, type = 'xp') {
     const id = ++toastId
     setToasts(prev => [...prev, { id, text, type }])
@@ -86,9 +110,12 @@ export default function App() {
   }, [audio])
 
   function playSound(type) {
-    if (type === 'message') audio.playMessage()
+    if      (type === 'message')  audio.playMessage()
     else if (type === 'complete') audio.playComplete()
-    else if (type === 'streak') audio.playStreakLog()
+    else if (type === 'streak')   audio.playStreakLog()
+    else if (type === 'delete')   audio.playDelete()
+    else if (type === 'nav')      audio.playNav()
+    else if (type === 'open')     audio.playOpen()
   }
 
   function toggleMusic() {
