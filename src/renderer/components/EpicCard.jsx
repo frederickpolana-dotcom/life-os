@@ -27,7 +27,7 @@ function DeadlineBadge({ horizon, endDate }) {
       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: color + '18', color }}>
         {label}
       </span>
-      <span className="text-[10px] font-bold" style={{ color }}>
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: color + '18', color }}>
         {fmtDate(deadline)} · {daysLabel}
       </span>
     </div>
