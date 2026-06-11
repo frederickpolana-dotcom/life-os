@@ -5,6 +5,11 @@ import { presetToEndDate, endDateToHorizon, daysUntil } from '../utils/dates'
 
 const PRESETS = ['2 weeks', '1 month', '2 months', '3 months', '6 months', '1 year', 'long term', 'custom']
 
+const HORIZONS = [
+  { value: 'quarter',  label: 'This Quarter' },
+  { value: 'year',     label: 'This Year'    },
+  { value: 'longterm', label: 'Long Term'    },
+]
 const COLORS  = ['teal', 'amber', 'purple']
 const COLOR_HEX = { teal: '#1D9E75', amber: '#EF9F27', purple: '#7F77DD' }
 
