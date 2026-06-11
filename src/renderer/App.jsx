@@ -6,6 +6,7 @@ import AIPanel from './components/AIPanel'
 import XPToast from './components/XPToast'
 import ConfettiCelebration from './components/ConfettiCelebration'
 import Dashboard from './pages/Dashboard'
+import Daily from './pages/Daily'
 import Epics from './pages/Epics'
 import EpicDetail from './pages/EpicDetail'
 import Streaks from './pages/Streaks'
@@ -54,7 +55,10 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (window.electronAPI) loadProfile()
+    if (!window.electronAPI) return
+    // Runtime migration — safe to run every startup, errors mean column already exists
+    window.electronAPI.db.run('ALTER TABLE epics ADD COLUMN end_date DATE').catch(() => {})
+    loadProfile()
   }, [])
 
   // Global click sound + ripple on every button press
@@ -166,6 +170,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard"  element={<Dashboard awardXp={(n) => awardXp(n, 'streak')} onOpenAI={() => setAiOpen(true)} />} />
+              <Route path="/daily"      element={<Daily     awardXp={(n) => awardXp(n, 'streak')} />} />
               <Route path="/epics"      element={<Epics awardXp={(n) => awardXp(n, 'epic')} />} />
               <Route path="/epics/:id"  element={<EpicDetail awardXp={(n) => awardXp(n, 'complete')} />} />
               <Route path="/streaks"    element={<Streaks awardXp={(n) => awardXp(n, 'streak')} />} />
