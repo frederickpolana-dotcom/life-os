@@ -59,17 +59,16 @@ export default function Topbar({ userName, userInitials, xp, level, musicOn, onT
 
         {/* XP bar */}
         <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: '#2a5c40' }}>
-              {LEVEL_LABELS[level - 1]}
-            </span>
-            <span className="text-[10px] font-extrabold font-mono" style={{ color: '#4dffb0' }}>{xp} XP</span>
-          </div>
+          <span className="text-[10px] font-extrabold font-mono whitespace-nowrap" style={{ color: '#4dffb0' }}>
+            {level >= 5
+              ? `Level ${level} · ${xp} XP · MAX`
+              : `Level ${level} · ${xp} / ${xpForNextLevel(level)} XP`}
+          </span>
           {/* HP-style segmented bar */}
           <div
             className="relative w-[140px] overflow-hidden"
             style={{
-              height: 10,
+              height: 8,
               background: 'rgba(0,0,0,0.35)',
               borderRadius: 2,
               border: '1px solid rgba(29,158,117,0.2)',
