@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   tasks: {
     getTopTasks: (n) => ipcRenderer.invoke('tasks:getTopTasks', n),
+    runScoring:  ()  => ipcRenderer.invoke('tasks:runScoring'),
   },
   widget: {
     openMain:      ()      => ipcRenderer.invoke('widget:open-main'),

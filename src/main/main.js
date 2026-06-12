@@ -243,6 +243,7 @@ ipcMain.handle('files:readDocument', async () => {
 
 // ── IPC: tasks ───────────────────────────────────────────────────────────────
 ipcMain.handle('tasks:getTopTasks', (_e, n = 5) => getTopTasks(db.getDb(), n))
+ipcMain.handle('tasks:runScoring',  ()           => runScoringEngine(db.getDb()))
 
 // ── IPC: widget controls ──────────────────────────────────────────────────────
 ipcMain.handle('widget:open-main', () => {

@@ -26,12 +26,13 @@ export default function Dashboard({ awardXp, onOpenAI }) {
   const [doneTaskIds, setDoneTaskIds]       = useState(new Set())
   const [focusTask,   setFocusTask]         = useState(null)
   const [focusCollapsed, setFocusCollapsed] = useState(false)
+  const [topTasks,    setTopTasks]          = useState([])
 
   useEffect(() => { if (window.electronAPI) loadAll() }, [])
 
   async function loadAll() {
     try {
-      const [epicRows, streakRows, logRows, taskStats, xpRow, todayRows, overdueRows, focusRow] = await Promise.all([
+      const [epicRows, streakRows, logRows, taskStats, xpRow, todayRows, overdueRows, focusRow, topTaskRows] = await Promise.all([
         window.electronAPI.db.query('SELECT * FROM epics ORDER BY updated_at DESC', []),
         window.electronAPI.db.query('SELECT * FROM streak_habits ORDER BY current_streak DESC', []),
         window.electronAPI.db.query("SELECT habit_id FROM streak_logs WHERE logged_date = date('now')", []),
@@ -56,6 +57,7 @@ export default function Dashboard({ awardXp, onOpenAI }) {
            LIMIT 1`,
           []
         ),
+        window.electronAPI.tasks.getTopTasks(3),
       ])
       setEpics(epicRows)
       setStreaks(streakRows)
@@ -69,6 +71,15 @@ export default function Dashboard({ awardXp, onOpenAI }) {
       setDueTodayTasks(todayRows)
       setOverdueTasks(overdueRows)
       setFocusTask(focusRow || null)
+      setTopTasks(topTaskRows || [])
+    } catch {}
+  }
+
+  async function refreshTopTasks() {
+    try {
+      await window.electronAPI.tasks.runScoring()
+      const fresh = await window.electronAPI.tasks.getTopTasks(3)
+      setTopTasks(fresh || [])
     } catch {}
   }
 
@@ -92,7 +103,6 @@ export default function Dashboard({ awardXp, onOpenAI }) {
       setOverdueTasks(prev => prev.filter(t => t.id !== taskId))
       if (focusTask?.id === taskId) {
         setFocusTask(null)
-        // Load the next most urgent task
         const next = await window.electronAPI.db.get(
           `SELECT s.id, s.title, s.due_date,
                   e.id as epic_id, e.name as epic_name, e.color as epic_color, e.end_date
@@ -104,6 +114,7 @@ export default function Dashboard({ awardXp, onOpenAI }) {
         )
         setFocusTask(next || null)
       }
+      refreshTopTasks()
     } catch {}
   }
 
@@ -138,6 +149,9 @@ export default function Dashboard({ awardXp, onOpenAI }) {
       <ConfettiCelebration trigger={confetti} />
       <WalkingMario onOpenAI={onOpenAI} />
 
+      {/* Today's Focus strip — top 3 priority tasks */}
+      <TopFocusStrip tasks={topTasks} onDone={completeTask} />
+
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-4 mb-8">
         <StatCard label="Active Epics"   value={inProgressEpics.length}                     color="teal"   icon="⚔️" />
@@ -154,7 +168,7 @@ export default function Dashboard({ awardXp, onOpenAI }) {
         >
           <span className="text-[15px]">🎯</span>
           <h2 className="text-[15px] font-extrabold text-teal-dark group-hover:text-primary transition-colors">
-            Today's Focus
+            Focus Task
           </h2>
           {focusTask && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -433,6 +447,98 @@ function FocusCard({ task, onDone }) {
         Mark done
       </button>
     </div>
+  )
+}
+
+// ── Today's Focus strip ───────────────────────────────────────────────────────
+
+function TopFocusStrip({ tasks, onDone }) {
+  // Always show exactly 3 slots; pad with nulls for empty slots
+  const slots = tasks.slice(0, 3)
+  while (slots.length < 3) slots.push(null)
+
+  return (
+    <div
+      className="mb-6 p-4"
+      style={{
+        background: '#e8f5ee',
+        border: '1px solid #b3e8d3',
+        borderRadius: 6,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[13px]">🎯</span>
+        <h2 className="text-[13px] font-extrabold text-teal-dark">Today's Focus</h2>
+        <span className="text-[10px] font-semibold text-text-muted">— top priority tasks</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {slots.map((task, i) =>
+          task
+            ? <FocusTaskCard key={task.id} task={task} onDone={onDone} />
+            : <AddTaskPromptCard key={`empty-${i}`} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FocusTaskCard({ task, onDone }) {
+  const epicColor = EPIC_COLOR_HEX[task.epic_color] || '#1D9E75'
+  const xp        = task.xp_value || 15
+
+  return (
+    <div
+      className="bg-white flex flex-col gap-2 p-3"
+      style={{
+        border: '1.5px solid #d4f0e6',
+        borderRadius: 4,
+        boxShadow: '2px 2px 0 rgba(29,158,117,0.14)',
+      }}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-[12px] font-bold text-teal-dark leading-snug line-clamp-2">{task.title}</p>
+        <span
+          className="text-[10px] font-bold px-1.5 py-0.5 rounded mt-1.5 inline-block"
+          style={{ background: epicColor + '18', color: epicColor }}
+        >
+          {task.epic_name}
+        </span>
+      </div>
+      <div className="flex items-center justify-between pt-1" style={{ borderTop: '1px solid #e8f5ee' }}>
+        <span className="text-[10px] font-extrabold" style={{ color: '#EF9F27' }}>+{xp} XP</span>
+        <button
+          onClick={() => onDone(task.id, task.epic_id)}
+          className="px-2.5 py-1 text-[10px] font-extrabold text-white game-btn"
+          style={{
+            background: '#1D9E75',
+            border: '1.5px solid #085041',
+            boxShadow: '2px 2px 0 #085041',
+            borderRadius: 3,
+          }}
+        >
+          Done ✓
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AddTaskPromptCard() {
+  const navigate = useNavigate()
+  return (
+    <button
+      onClick={() => navigate('/epics')}
+      className="flex flex-col items-center justify-center p-3 w-full transition-all hover:bg-teal-light/50"
+      style={{
+        border: '1.5px dashed #b3e8d3',
+        borderRadius: 4,
+        minHeight: 88,
+        cursor: 'pointer',
+      }}
+    >
+      <span className="text-[20px] font-light" style={{ color: '#b3e8d3', lineHeight: 1 }}>+</span>
+      <p className="text-[10px] font-bold mt-1" style={{ color: '#9bbdaa' }}>Add a task</p>
+    </button>
   )
 }
 
