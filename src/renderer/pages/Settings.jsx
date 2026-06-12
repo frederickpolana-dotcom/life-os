@@ -24,7 +24,7 @@ const inputCls = 'w-full px-3 py-2 text-[12px] bg-teal-pale border border-teal-b
 export default function Settings({ onProfileUpdate, appTheme = 'dynamic', xp = 0, onThemeChange }) {
   const [profile, setProfile] = useState({ name: '', initials: '' })
   const [ai, setAi]           = useState({ provider: 'anthropic', model: 'claude-sonnet-4-20250514', key: '', ollamaEndpoint: 'http://localhost:11434', ollamaModel: 'llama3' })
-  const [prefs, setPrefs]     = useState({ launch_on_startup: 'true', start_minimized: 'false' })
+  const [prefs, setPrefs]     = useState({ launch_on_startup: 'true', start_minimized: 'false', nudge_dnd: 'false' })
   const [saved, setSaved]     = useState('')
   const [showKey, setShowKey] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -33,7 +33,7 @@ export default function Settings({ onProfileUpdate, appTheme = 'dynamic', xp = 0
 
   async function load() {
     try {
-      const [name, initials, provider, model, ollamaEndpoint, ollamaModel, startup, minimized] = await Promise.all([
+      const [name, initials, provider, model, ollamaEndpoint, ollamaModel, startup, minimized, dnd] = await Promise.all([
         window.electronAPI.settings.get('user_name'),
         window.electronAPI.settings.get('user_initials'),
         window.electronAPI.settings.get('ai_provider'),
@@ -42,11 +42,12 @@ export default function Settings({ onProfileUpdate, appTheme = 'dynamic', xp = 0
         window.electronAPI.settings.get('ollama_model'),
         window.electronAPI.settings.get('launch_on_startup'),
         window.electronAPI.settings.get('start_minimized'),
+        window.electronAPI.settings.get('nudge_dnd'),
       ])
       setProfile({ name: name || '', initials: initials || '' })
       const prov = provider || 'anthropic'
       setAi({ provider: prov, model: model || 'claude-sonnet-4-20250514', key: '', ollamaEndpoint: ollamaEndpoint || 'http://localhost:11434', ollamaModel: ollamaModel || 'llama3' })
-      setPrefs({ launch_on_startup: startup || 'true', start_minimized: minimized || 'false' })
+      setPrefs({ launch_on_startup: startup || 'true', start_minimized: minimized || 'false', nudge_dnd: dnd || 'false' })
     } catch {}
   }
 
@@ -82,6 +83,7 @@ export default function Settings({ onProfileUpdate, appTheme = 'dynamic', xp = 0
       await Promise.all([
         window.electronAPI.settings.set('launch_on_startup', prefs.launch_on_startup),
         window.electronAPI.settings.set('start_minimized', prefs.start_minimized),
+        window.electronAPI.settings.set('nudge_dnd', prefs.nudge_dnd),
       ])
       if (window.electronAPI.system?.setLoginItem) {
         window.electronAPI.system.setLoginItem(prefs.launch_on_startup === 'true')
@@ -210,6 +212,12 @@ export default function Settings({ onProfileUpdate, appTheme = 'dynamic', xp = 0
               hint="Launch to tray instead of showing window"
               value={prefs.start_minimized === 'true'}
               onChange={v => setPrefs(p => ({...p, start_minimized: String(v)}))}
+            />
+            <Toggle
+              label="Do not disturb"
+              hint="Silence all desktop nudge notifications"
+              value={prefs.nudge_dnd === 'true'}
+              onChange={v => setPrefs(p => ({...p, nudge_dnd: String(v)}))}
             />
           </div>
           <SaveBtn onClick={savePrefs} saved={saved === 'prefs'} />

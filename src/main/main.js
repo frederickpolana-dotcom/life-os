@@ -5,6 +5,7 @@ const db   = require('./database')
 const { routeAiChat }                    = require('./aiHandler')
 const { runScoringEngine, getTopTasks }  = require('./scoringEngine')
 const { runDailyMemoryUpdate }           = require('./assistantMemory')
+const { initNudgeEngine, recordActivity } = require('./nudgeEngine')
 
 // ── Single-instance lock ────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock()
@@ -171,6 +172,7 @@ ipcMain.handle('ai:chat', async (_e, payload) => {
 
 // ── IPC: XP ──────────────────────────────────────────────────────────────────
 ipcMain.handle('xp:award', (_e, amount) => {
+  recordActivity()   // signals idle nudge that the user is active
   const current = parseInt(db.getSetting('xp_total') || '0', 10)
   const newTotal = current + amount
   db.setSetting('xp_total', String(newTotal))
@@ -278,6 +280,9 @@ app.whenReady().then(() => {
 
   // Run behavioral pattern detection once per calendar day
   runDailyMemoryUpdate(db.getDb())
+
+  // Start nudge engine (desktop notifications)
+  initNudgeEngine(db.getDb(), mainWindow)
 })
 
 app.on('window-all-closed', (e) => {

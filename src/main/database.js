@@ -166,6 +166,12 @@ function initSchema() {
       last_observed DATE,
       occurrence_count INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS nudge_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nudge_key TEXT NOT NULL UNIQUE,
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `)
 
   // Migrations for existing DBs
