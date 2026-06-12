@@ -33,6 +33,22 @@ function fmtTime(t) {
   return `${h12}:${String(m).padStart(2,'0')} ${ampm}`
 }
 
+// ── Schedule helpers (outside component — no stale closures) ─────────────────
+
+function parseScheduleBlocks(rawText) {
+  const cleaned = (rawText || '')
+    .replace(/```json/gi, '').replace(/```/g, '').trim()
+  const start = cleaned.indexOf('[')
+  const end   = cleaned.lastIndexOf(']')
+  if (start === -1 || end === -1) return []
+  try {
+    const arr = JSON.parse(cleaned.slice(start, end + 1))
+    return Array.isArray(arr)
+      ? arr.filter(b => typeof b.start_time === 'string' && typeof b.label === 'string')
+      : []
+  } catch { return [] }
+}
+
 export default function Daily({ awardXp }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -47,6 +63,13 @@ export default function Daily({ awardXp }) {
   const [addingRem,  setAddingRem]  = useState(false)
   const [remTitle,   setRemTitle]   = useState('')
   const [remTime,    setRemTime]    = useState('09:00')
+  // Schedule state
+  const [schedule,          setSchedule]          = useState([])
+  const [scheduleLoading,   setScheduleLoading]   = useState(false)
+  const [scheduleError,     setScheduleError]     = useState('')
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false)
+  const [dragIdx,           setDragIdx]           = useState(null)
+  const [dragOverIdx,       setDragOverIdx]       = useState(null)
 
   const todayStr = toDateStr(today)
   const selStr   = toDateStr(selDate)
@@ -72,11 +95,19 @@ export default function Daily({ awardXp }) {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `).catch(() => {})
+    await window.electronAPI.db.run(`
+      CREATE TABLE IF NOT EXISTS daily_schedules (
+        schedule_date DATE PRIMARY KEY,
+        blocks TEXT NOT NULL,
+        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(() => {})
   }
 
   async function loadAll() {
     try {
-      const [taskRows, remRows, habitRows, logRows] = await Promise.all([
+      const [taskRows, remRows, habitRows, logRows, schedRow] = await Promise.all([
         window.electronAPI.db.query(
           `SELECT s.id, s.title, s.status, e.name as epic_name, e.color as epic_color
            FROM subtasks s JOIN epics e ON e.id = s.epic_id
@@ -96,11 +127,20 @@ export default function Daily({ awardXp }) {
           "SELECT habit_id FROM streak_logs WHERE logged_date = date('now')",
           []
         ),
+        window.electronAPI.db.get(
+          'SELECT blocks FROM daily_schedules WHERE schedule_date = ?',
+          [selStr]
+        ).catch(() => null),
       ])
       setTasks(taskRows)
       setReminders(remRows)
       setHabits(habitRows)
       setLoggedIds(new Set(logRows.map(r => r.habit_id)))
+      if (schedRow?.blocks) {
+        try { setSchedule(JSON.parse(schedRow.blocks)) } catch { setSchedule([]) }
+      } else {
+        setSchedule([])
+      }
     } catch {}
   }
 
@@ -177,6 +217,157 @@ export default function Daily({ awardXp }) {
     setWeekAnchor(d)
   }
 
+  // ── Schedule helpers ─────────────────────────────────────────────────────────
+
+  async function saveSchedule(blocks) {
+    await window.electronAPI.db.run(
+      `INSERT INTO daily_schedules (schedule_date, blocks, updated_at)
+       VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(schedule_date) DO UPDATE SET
+         blocks     = excluded.blocks,
+         updated_at = excluded.updated_at`,
+      [selStr, JSON.stringify(blocks)]
+    ).catch(() => {})
+  }
+
+  async function generateSchedule() {
+    setConfirmRegenerate(false)
+    setScheduleError('')
+    setScheduleLoading(true)
+    try {
+      const [topTasks, memRow, todayRems, provider, model, ollamaEndpoint, ollamaModel] = await Promise.all([
+        window.electronAPI.tasks.getTopTasks(10),
+        window.electronAPI.db.get(
+          "SELECT description FROM assistant_memory WHERE pattern_type = 'productive_hour'"
+        ).catch(() => null),
+        window.electronAPI.db.query(
+          'SELECT title, remind_time FROM reminders WHERE remind_date = ? AND is_done = 0 ORDER BY remind_time',
+          [selStr]
+        ).catch(() => []),
+        window.electronAPI.settings.get('ai_provider'),
+        window.electronAPI.settings.get('ai_model'),
+        window.electronAPI.settings.get('ollama_endpoint'),
+        window.electronAPI.settings.get('ollama_model'),
+      ])
+
+      const now = new Date()
+      const currentTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+
+      const taskLines = topTasks.length
+        ? topTasks.map((t, i) =>
+            `  ${i + 1}. [id:${t.id}] "${t.title}" (epic: ${t.epic_name || 'none'}, score: ${t.priority_score || 0}, xp: ${t.xp_value || 15})`
+          ).join('\n')
+        : '  (no open tasks)'
+
+      const remLines = todayRems.length
+        ? todayRems.map(r => `  - ${r.remind_time || '?'} ${r.title}`).join('\n')
+        : '  (none)'
+
+      const peakInfo = memRow?.description || 'unknown'
+
+      const userMsg = [
+        `Current time: ${currentTime}`,
+        `Scheduling date: ${selStr}`,
+        `Peak productive window: ${peakInfo}`,
+        '\nOpen tasks ranked by priority score:',
+        taskLines,
+        '\nFixed commitments / reminders today:',
+        remLines,
+      ].join('\n')
+
+      const systemPrompt = `You are a personal productivity scheduler. Generate a realistic daily schedule.
+
+Return ONLY a valid JSON array — no markdown, no code fences, no explanation before or after it.
+Each element must have exactly these fields:
+  "start_time": string in "HH:MM" 24-hour format
+  "end_time": string in "HH:MM" 24-hour format
+  "task_id": number (the [id:N] from the task list) or null for non-task blocks
+  "label": string (concise display name, max 60 chars)
+  "reason": string (one sentence, max 80 chars)
+
+Rules:
+- Schedule within a realistic workday (08:00–21:00)
+- Place highest-priority tasks during the peak productive window
+- Include short breaks (15–20 min) between deep work sessions
+- Honour any fixed commitments at their listed times
+- Aim for 6–10 blocks total; each block 30–120 minutes
+- Blocks must not overlap and must appear in chronological order`
+
+      const effectiveModel = (provider === 'ollama')
+        ? (ollamaModel || 'llama3')
+        : (model || 'claude-sonnet-4-20250514')
+
+      const rawText = await window.electronAPI.ai.chat(
+        [{ role: 'user', content: userMsg }],
+        provider,
+        effectiveModel,
+        ollamaEndpoint || null,
+        systemPrompt,
+      )
+
+      const blocks = parseScheduleBlocks(rawText)
+      if (!blocks.length) throw new Error('AI returned no valid time blocks')
+
+      setSchedule(blocks)
+      await saveSchedule(blocks)
+    } catch (err) {
+      setScheduleError(err.message || 'Failed to generate schedule')
+    } finally {
+      setScheduleLoading(false)
+    }
+  }
+
+  async function completeBlock(taskId) {
+    if (!taskId) return
+    const row = await window.electronAPI.db.get(
+      'SELECT epic_id FROM subtasks WHERE id = ?', [taskId]
+    ).catch(() => null)
+    if (!row) return
+
+    await window.electronAPI.db.run(
+      "UPDATE subtasks SET status='done', completed_at=CURRENT_TIMESTAMP WHERE id=?",
+      [taskId]
+    )
+
+    // Recalc epic progress
+    const progress = await window.electronAPI.db.get(
+      `SELECT COUNT(*) as total,
+              SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done
+       FROM subtasks WHERE epic_id=? AND parent_id IS NULL`,
+      [row.epic_id]
+    ).catch(() => null)
+    if (progress) {
+      const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
+      await window.electronAPI.db.run(
+        'UPDATE epics SET progress=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+        [pct, row.epic_id]
+      )
+    }
+
+    await awardXp?.(15)
+    await window.electronAPI.tasks.runScoring().catch(() => {})
+
+    // Mark block as done in state + persist
+    setSchedule(prev => {
+      const next = prev.map(b => b.task_id === taskId ? { ...b, done: true } : b)
+      saveSchedule(next)
+      return next
+    })
+    // Refresh tasks list
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+  }
+
+  function reorderBlocks(fromIdx, toIdx) {
+    if (fromIdx === toIdx) return
+    setSchedule(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      saveSchedule(next)
+      return next
+    })
+  }
+
   const allDone  = habits.length > 0 && habits.every(h => loggedIds.has(h.id))
   const doneCount = habits.filter(h => loggedIds.has(h.id)).length
 
@@ -184,7 +375,7 @@ export default function Daily({ awardXp }) {
     <div className="page-enter max-w-[660px]">
 
       {/* Header */}
-      <div className="mb-5 flex items-end justify-between">
+      <div className="mb-5 flex items-end justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-[22px] font-extrabold text-teal-dark">
@@ -199,14 +390,61 @@ export default function Daily({ awardXp }) {
             {MONTHS[selDate.getMonth()]} {selDate.getDate()}, {selDate.getFullYear()}
           </p>
         </div>
-        {!isToday && (
-          <button
-            onClick={() => { setSelDate(new Date(today)); setWeekAnchor(new Date(today)) }}
-            className="text-[11px] font-bold text-primary hover:text-teal-med transition-colors"
-          >
-            ← Back to today
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {!isToday && (
+            <button
+              onClick={() => { setSelDate(new Date(today)); setWeekAnchor(new Date(today)) }}
+              className="text-[11px] font-bold text-primary hover:text-teal-med transition-colors"
+            >
+              ← Back to today
+            </button>
+          )}
+          {/* Generate my day button */}
+          {confirmRegenerate ? (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg"
+              style={{ background: '#FFF8EC', border: '1.5px solid #EF9F2740' }}>
+              <span className="text-[10px] font-bold" style={{ color: '#a65c00' }}>Replace schedule?</span>
+              <button onClick={generateSchedule}
+                className="text-[10px] font-extrabold px-2 py-0.5 rounded transition-all"
+                style={{ background: '#EF9F27', color: 'white', border: '1.5px solid #a65c00' }}>
+                Yes
+              </button>
+              <button onClick={() => setConfirmRegenerate(false)}
+                className="text-[10px] font-bold px-2 py-0.5 rounded transition-all"
+                style={{ background: '#f4fdf8', color: '#4a7060', border: '1.5px solid #b3e8d3' }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => schedule.length > 0 ? setConfirmRegenerate(true) : generateSchedule()}
+              disabled={scheduleLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-extrabold rounded-[10px] transition-all disabled:opacity-50"
+              style={{
+                background: '#EF9F27',
+                color: 'white',
+                border: '2px solid #a65c00',
+                boxShadow: '2px 2px 0 #a65c00',
+              }}
+            >
+              {scheduleLoading ? (
+                <>
+                  <SpinIcon />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                  </svg>
+                  Generate my day
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Week strip */}
@@ -440,6 +678,147 @@ export default function Daily({ awardXp }) {
           </div>
         </div>
       )}
+
+      {/* AI Schedule Timeline */}
+      {(schedule.length > 0 || scheduleLoading) && (
+        <div className="mb-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <span className="text-[14px]">🗓️</span>
+            <h2 className="text-[13px] font-extrabold text-teal-dark">AI Schedule</h2>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+              style={{ background: '#7F77DD20', color: '#7F77DD' }}>
+              drag to reorder
+            </span>
+          </div>
+
+          {scheduleError && (
+            <p className="text-[11px] font-bold mb-2" style={{ color: '#e05050' }}>
+              ⚠ {scheduleError}
+            </p>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            {schedule.map((block, idx) => (
+              <TimeBlock
+                key={idx}
+                block={block}
+                index={idx}
+                isDragOver={dragOverIdx === idx}
+                onDone={() => completeBlock(block.task_id)}
+                onDragStart={() => { setDragIdx(idx); setDragOverIdx(null) }}
+                onDragOver={() => setDragOverIdx(idx)}
+                onDrop={() => {
+                  reorderBlocks(dragIdx, idx)
+                  setDragIdx(null)
+                  setDragOverIdx(null)
+                }}
+                onDragEnd={() => { setDragIdx(null); setDragOverIdx(null) }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Error shown when schedule is empty but something went wrong */}
+      {!schedule.length && !scheduleLoading && scheduleError && (
+        <p className="text-[11px] font-bold mb-4" style={{ color: '#e05050' }}>
+          ⚠ {scheduleError}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function SpinIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ animation: 'spin 1s linear infinite' }}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  )
+}
+
+function TimeBlock({ block, index, isDragOver, onDone, onDragStart, onDragOver, onDrop, onDragEnd }) {
+  const isTask   = !!block.task_id
+  const isDone   = !!block.done
+  const isBreak  = !isTask
+
+  const barColor = isDone ? '#9bbdaa' : isBreak ? '#c8e6d9' : '#1D9E75'
+  const bg       = isDone ? '#f9fefb' : isBreak ? '#f9fefb' : 'white'
+
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={e => { e.preventDefault(); onDragOver() }}
+      onDrop={e => { e.preventDefault(); onDrop() }}
+      onDragEnd={onDragEnd}
+      className="flex items-start gap-3 p-3 rounded-[10px] transition-all select-none"
+      style={{
+        background: bg,
+        border: `1.5px solid ${isDragOver ? '#1D9E75' : isDone ? '#d4f0e6' : '#e8f5ee'}`,
+        boxShadow: isDragOver ? '0 0 0 2px rgba(29,158,117,0.2)' : '1px 1px 0 rgba(8,80,65,0.06)',
+        opacity: isDone ? 0.6 : 1,
+        cursor: 'grab',
+      }}
+    >
+      {/* Drag handle */}
+      <div className="flex-shrink-0 mt-0.5 text-text-hint" style={{ cursor: 'grab', lineHeight: 1 }}>
+        <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+          <circle cx="3" cy="2"  r="1.2" /><circle cx="7" cy="2"  r="1.2" />
+          <circle cx="3" cy="7"  r="1.2" /><circle cx="7" cy="7"  r="1.2" />
+          <circle cx="3" cy="12" r="1.2" /><circle cx="7" cy="12" r="1.2" />
+        </svg>
+      </div>
+
+      {/* Color bar */}
+      <div className="flex-shrink-0 w-1 self-stretch rounded-full mt-0.5"
+        style={{ background: barColor, minHeight: 36 }} />
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-extrabold tabular-nums"
+            style={{ color: isDone ? '#9bbdaa' : '#4a7060' }}>
+            {block.start_time}–{block.end_time}
+          </span>
+          <span className="text-[12px] font-bold flex-1 min-w-0 truncate"
+            style={{
+              color: isDone ? '#9bbdaa' : '#085041',
+              textDecoration: isDone ? 'line-through' : 'none',
+            }}>
+            {block.label}
+          </span>
+          {isTask && !isDone && (
+            <button
+              onClick={e => { e.stopPropagation(); onDone() }}
+              className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold transition-all hover:opacity-80 active:scale-95"
+              style={{
+                background: '#1D9E7518',
+                color: '#1D9E75',
+                border: '1.5px solid #b3e8d3',
+              }}
+            >
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Done
+            </button>
+          )}
+          {isDone && (
+            <span className="flex-shrink-0 text-[10px] font-bold" style={{ color: '#22c55e' }}>✓ Done</span>
+          )}
+        </div>
+        {block.reason && (
+          <p className="text-[10px] mt-0.5 truncate"
+            style={{ color: '#9bbdaa' }}>
+            {block.reason}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
