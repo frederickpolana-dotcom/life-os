@@ -4,6 +4,7 @@ const fs   = require('fs')
 const db   = require('./database')
 const { routeAiChat }                    = require('./aiHandler')
 const { runScoringEngine, getTopTasks }  = require('./scoringEngine')
+const { runDailyMemoryUpdate }           = require('./assistantMemory')
 
 // ── Single-instance lock ────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock()
@@ -273,6 +274,9 @@ app.whenReady().then(() => {
   // Run priority scoring engine on startup, then every 30 minutes
   runScoringEngine(db.getDb())
   setInterval(() => runScoringEngine(db.getDb()), 30 * 60 * 1000)
+
+  // Run behavioral pattern detection once per calendar day
+  runDailyMemoryUpdate(db.getDb())
 })
 
 app.on('window-all-closed', (e) => {

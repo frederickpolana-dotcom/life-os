@@ -156,6 +156,16 @@ function initSchema() {
       content TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS assistant_memory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pattern_type TEXT NOT NULL UNIQUE,
+      description TEXT,
+      confidence REAL DEFAULT 0.0,
+      first_observed DATE,
+      last_observed DATE,
+      occurrence_count INTEGER DEFAULT 0
+    );
   `)
 
   // Migrations for existing DBs
