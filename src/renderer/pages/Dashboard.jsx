@@ -27,37 +27,62 @@ export default function Dashboard({ awardXp, onOpenAI }) {
   const [focusTask,   setFocusTask]         = useState(null)
   const [focusCollapsed, setFocusCollapsed] = useState(false)
   const [topTasks,    setTopTasks]          = useState([])
+  const [dailyEpicTasks, setDailyEpicTasks] = useState([])
+  const [dailyEpicDone,  setDailyEpicDone]  = useState(new Set())
 
-  useEffect(() => { if (window.electronAPI) loadAll() }, [])
+  useEffect(() => {
+    if (!window.electronAPI) return
+    window.electronAPI.db.run(
+      `CREATE TABLE IF NOT EXISTS recurring_completions (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         subtask_id INTEGER REFERENCES subtasks(id) ON DELETE CASCADE,
+         completed_date DATE NOT NULL,
+         UNIQUE(subtask_id, completed_date)
+       )`
+    ).catch(() => {}).finally(() => loadAll())
+  }, [])
 
   async function loadAll() {
     try {
-      const [epicRows, streakRows, logRows, taskStats, xpRow, todayRows, overdueRows, focusRow, topTaskRows] = await Promise.all([
+      const [epicRows, streakRows, logRows, taskStats, xpRow, todayRows, overdueRows, focusRow, topTaskRows, dailyTaskRows, dailyDoneRows] = await Promise.all([
         window.electronAPI.db.query('SELECT * FROM epics ORDER BY updated_at DESC', []),
         window.electronAPI.db.query('SELECT * FROM streak_habits ORDER BY current_streak DESC', []),
         window.electronAPI.db.query("SELECT habit_id FROM streak_logs WHERE logged_date = date('now')", []),
         window.electronAPI.db.query(
-          "SELECT COUNT(*) as total_tasks, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done_tasks FROM subtasks WHERE parent_id IS NULL", []
+          "SELECT COUNT(*) as total_tasks, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done_tasks FROM subtasks WHERE parent_id IS NULL AND is_recurring = 0", []
         ),
         window.electronAPI.settings.get('xp_total'),
         window.electronAPI.db.query(
-          "SELECT s.id, s.title, s.due_date, s.status, e.name as epic_name, e.color as epic_color, e.id as epic_id FROM subtasks s JOIN epics e ON e.id = s.epic_id WHERE s.due_date = date('now') AND s.status != 'done' ORDER BY s.id",
+          "SELECT s.id, s.title, s.due_date, s.status, e.name as epic_name, e.color as epic_color, e.id as epic_id FROM subtasks s JOIN epics e ON e.id = s.epic_id WHERE s.due_date = date('now') AND s.status != 'done' AND s.is_recurring = 0 ORDER BY s.id",
           []
         ),
         window.electronAPI.db.query(
-          "SELECT s.id, s.title, s.due_date, s.status, e.name as epic_name, e.color as epic_color, e.id as epic_id FROM subtasks s JOIN epics e ON e.id = s.epic_id WHERE s.due_date < date('now') AND s.status != 'done' ORDER BY s.due_date ASC",
+          "SELECT s.id, s.title, s.due_date, s.status, e.name as epic_name, e.color as epic_color, e.id as epic_id FROM subtasks s JOIN epics e ON e.id = s.epic_id WHERE s.due_date < date('now') AND s.status != 'done' AND s.is_recurring = 0 ORDER BY s.due_date ASC",
           []
         ),
         window.electronAPI.db.get(
           `SELECT s.id, s.title, s.due_date,
                   e.id as epic_id, e.name as epic_name, e.color as epic_color, e.end_date
            FROM subtasks s JOIN epics e ON e.id = s.epic_id
-           WHERE s.status != 'done' AND e.status != 'done' AND s.parent_id IS NULL
+           WHERE s.status != 'done' AND e.status != 'done' AND s.parent_id IS NULL AND s.is_recurring = 0
            ORDER BY CASE WHEN e.end_date IS NOT NULL THEN e.end_date ELSE '9999-12-31' END ASC, s.id ASC
            LIMIT 1`,
           []
         ),
         window.electronAPI.tasks.getTopTasks(3),
+        window.electronAPI.db.query(
+          `SELECT s.id, s.title, s.epic_id,
+                  e.name as epic_name, e.color as epic_color
+           FROM subtasks s
+           JOIN epics e ON e.id = s.epic_id
+           WHERE s.is_recurring = 1 AND e.status != 'done'
+           ORDER BY e.id, s.id`,
+          []
+        ),
+        window.electronAPI.db.query(
+          "SELECT subtask_id FROM recurring_completions WHERE completed_date = date('now')",
+          []
+        ).catch(() => []),
       ])
       setEpics(epicRows)
       setStreaks(streakRows)
@@ -72,6 +97,8 @@ export default function Dashboard({ awardXp, onOpenAI }) {
       setOverdueTasks(overdueRows)
       setFocusTask(focusRow || null)
       setTopTasks(topTaskRows || [])
+      setDailyEpicTasks(dailyTaskRows || [])
+      setDailyEpicDone(new Set((dailyDoneRows || []).map(r => r.subtask_id)))
     } catch {}
   }
 
@@ -138,6 +165,19 @@ export default function Dashboard({ awardXp, onOpenAI }) {
       setStreaks(prev => prev.map(s =>
         s.id === habitId ? { ...s, current_streak: newStreak, longest_streak: newLongest } : s
       ))
+    } catch {}
+  }
+
+  async function logDailyEpicTask(taskId) {
+    if (dailyEpicDone.has(taskId)) return
+    try {
+      await window.electronAPI.db.run(
+        "INSERT OR IGNORE INTO recurring_completions (subtask_id, completed_date) VALUES (?, date('now'))",
+        [taskId]
+      )
+      const result = await awardXp(10)
+      if (result?.levelUp) setConfetti(c => c + 1)
+      setDailyEpicDone(prev => new Set([...prev, taskId]))
     } catch {}
   }
 
@@ -290,10 +330,10 @@ export default function Dashboard({ awardXp, onOpenAI }) {
           </div>
         </section>
 
-        {/* Right: Daily streaks */}
+        {/* Right: Daily streaks + Daily grind */}
         <section>
           <h2 className="text-[16px] font-extrabold text-teal-dark mb-4">Daily Streaks</h2>
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 mb-6">
             {streaks.map(habit => (
               <StreakMini
                 key={habit.id}
@@ -312,6 +352,39 @@ export default function Dashboard({ awardXp, onOpenAI }) {
               Manage streaks →
             </button>
           </div>
+
+          {dailyEpicTasks.length > 0 && (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-[14px] font-extrabold text-teal-dark flex items-center gap-1.5">
+                  🔄 Daily Grind
+                </h2>
+                {(() => {
+                  const doneCount = dailyEpicTasks.filter(t => dailyEpicDone.has(t.id)).length
+                  return (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{
+                        background: doneCount === dailyEpicTasks.length ? '#22c55e20' : '#EF9F2720',
+                        color:      doneCount === dailyEpicTasks.length ? '#22c55e'   : '#EF9F27',
+                      }}>
+                      {doneCount}/{dailyEpicTasks.length}
+                    </span>
+                  )
+                })()}
+              </div>
+              <p className="text-[10px] text-text-hint mb-2">Daily tasks from your epics · +10 XP each</p>
+              <div className="flex flex-col gap-2">
+                {dailyEpicTasks.map(task => (
+                  <DailyGrindRow
+                    key={task.id}
+                    task={task}
+                    done={dailyEpicDone.has(task.id)}
+                    onLog={logDailyEpicTask}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </div>
     </div>
@@ -539,6 +612,48 @@ function AddTaskPromptCard() {
       <span className="text-[20px] font-light" style={{ color: '#b3e8d3', lineHeight: 1 }}>+</span>
       <p className="text-[10px] font-bold mt-1" style={{ color: '#9bbdaa' }}>Add a task</p>
     </button>
+  )
+}
+
+function DailyGrindRow({ task, done, onLog }) {
+  const epicColor = EPIC_COLOR_HEX[task.epic_color] || '#1D9E75'
+  return (
+    <div
+      className="bg-white px-3 py-2.5 flex items-center gap-2"
+      style={{
+        border: done ? `1.5px solid ${epicColor}` : '1.5px solid #e5f5ee',
+        borderLeft: `3px solid ${done ? epicColor : '#d4f0e6'}`,
+        borderRadius: 4,
+        opacity: done ? 0.7 : 1,
+        transition: 'all 0.15s',
+      }}
+    >
+      <button
+        onClick={() => onLog(task.id)}
+        disabled={done}
+        className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center transition-all game-btn"
+        style={{
+          background: done ? epicColor : 'transparent',
+          border:     `1.5px solid ${done ? epicColor : '#b3e8d3'}`,
+          cursor:     done ? 'default' : 'pointer',
+        }}
+      >
+        {done && (
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        )}
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className={`text-[11px] font-bold text-teal-dark truncate ${done ? 'line-through opacity-60' : ''}`}>
+          {task.title}
+        </p>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: epicColor + '18', color: epicColor }}>
+          {task.epic_name}
+        </span>
+      </div>
+      {!done && <span className="text-[10px] font-extrabold flex-shrink-0" style={{ color: '#EF9F27' }}>+10</span>}
+    </div>
   )
 }
 
