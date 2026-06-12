@@ -21,6 +21,7 @@ import { useAudio } from './hooks/useAudio'
 import { MarioFaceIcon } from './components/MarioSprite'
 import { computeBg } from './utils/themes'
 import { generateBriefTemplate, generateBriefWithAI } from './utils/dailyBrief'
+import { fetchMemories } from './utils/systemPrompt'
 
 let toastId = 0
 
@@ -85,7 +86,7 @@ export default function App() {
 
     setBriefLoading(true)
     try {
-      const [topTasks, zeroStreaks, urgentEpics, provider, model, ollamaEndpoint] = await Promise.all([
+      const [topTasks, zeroStreaks, urgentEpics, provider, model, ollamaEndpoint, memories] = await Promise.all([
         window.electronAPI.tasks.getTopTasks(3),
         window.electronAPI.db.query('SELECT name FROM streak_habits WHERE current_streak = 0'),
         window.electronAPI.db.query(
@@ -98,11 +99,12 @@ export default function App() {
         window.electronAPI.settings.get('ai_provider'),
         window.electronAPI.settings.get('ai_model'),
         window.electronAPI.settings.get('ollama_endpoint'),
+        fetchMemories(),
       ])
 
       let text = ''
       try {
-        text = await generateBriefWithAI(topTasks, zeroStreaks, urgentEpics, provider, model, ollamaEndpoint)
+        text = await generateBriefWithAI(topTasks, zeroStreaks, urgentEpics, provider, model, ollamaEndpoint, memories)
       } catch {
         text = generateBriefTemplate(topTasks, zeroStreaks, urgentEpics)
       }

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MarioFaceIcon } from './MarioSprite'
+import { buildSystemPrompt, fetchMemories } from '../utils/systemPrompt'
 
 const PROVIDERS = [
   { value: 'anthropic', label: 'Claude',  color: '#1D9E75' },
@@ -16,11 +17,10 @@ const DEFAULT_MODELS = {
   ollama:    'llama3',
 }
 
-async function buildSystemPrompt() {
-  if (!window.electronAPI) return ''
+async function buildChatSystemPrompt() {
+  if (!window.electronAPI) return buildSystemPrompt({})
   try {
-    const [name, xp, level, epics, streaks, todayLogs] = await Promise.all([
-      window.electronAPI.settings.get('user_name'),
+    const [xp, level, epics, streaks, todayLogs, memories] = await Promise.all([
       window.electronAPI.settings.get('xp_total'),
       window.electronAPI.settings.get('xp_level'),
       window.electronAPI.db.query('SELECT id, name, status, progress, horizon FROM epics ORDER BY updated_at DESC', []),
@@ -28,38 +28,34 @@ async function buildSystemPrompt() {
       window.electronAPI.db.query(
         "SELECT h.id, h.name FROM streak_logs l JOIN streak_habits h ON h.id = l.habit_id WHERE l.logged_date = date('now')", []
       ),
+      fetchMemories(),
     ])
 
-    const epicsList    = epics.map(e => `  • [id:${e.id}] "${e.name}" — ${e.status}, ${e.progress}% done, horizon: ${e.horizon}`).join('\n')
-    const habitsList   = streaks.map(s => `  • [id:${s.id}] "${s.name}" — ${s.current_streak} day streak (best: ${s.longest_streak})`).join('\n')
-    const loggedToday  = todayLogs.length ? todayLogs.map(l => `"${l.name}"`).join(', ') : 'none yet'
+    const epicsList   = epics.map(e => `  • [id:${e.id}] "${e.name}" — ${e.status}, ${e.progress}% done, horizon: ${e.horizon}`).join('\n')
+    const habitsList  = streaks.map(s => `  • [id:${s.id}] "${s.name}" — ${s.current_streak} day streak (best: ${s.longest_streak})`).join('\n')
+    const loggedToday = todayLogs.length ? todayLogs.map(l => `"${l.name}"`).join(', ') : 'none yet'
 
-    return `You are Life OS AI — a strategic productivity coach inside a gamified desktop app for ${name || 'the user'}.
-
-== CONFIRMATION-FIRST RULE (IMPORTANT) ==
+    const extraRules = `== CONFIRMATION-FIRST RULE ==
 For big actions (create_goal, add_habit, add_contact): DO NOT execute immediately.
-Instead follow this flow:
-  1. Ask 1-2 focused clarifying questions: What's the real goal? What's the timeline? Any constraints?
-  2. Propose your full plan in text: name, timeframe, and a detailed numbered subtask list
-  3. End with: "Want me to set this up in Life OS? Just say yes! 🎯"
-  4. ONLY include the action block AFTER user says yes / "do it" / "go ahead" / "looks good" / "create it"
+  1. Ask 1–2 focused clarifying questions (goal, timeline, constraints)
+  2. Propose the full plan in text with a numbered subtask list
+  3. End with: "Want me to set this up in Life OS? Just say yes!"
+  4. ONLY include the action block AFTER the user confirms
 
-For simple direct actions (navigate, log streak, add a single task to existing epic) — act immediately, no confirmation needed.
+For simple direct actions (navigate, log streak, add a single task to existing epic) — act immediately.
 
-== SUBTASK QUALITY RULES ==
-When you propose or create subtasks, every single one must be:
-- SPECIFIC: includes what exactly to do, not just a vague topic
-  ✗ Bad: "Study math"
-  ✓ Good: "Complete Khan Academy Calculus Unit 1-3 (est. 8 hrs)"
-- MEASURABLE: has a clear done condition
-  ✗ Bad: "Practice coding"
-  ✓ Good: "Build 3 portfolio projects: a CLI tool, a web scraper, and a REST API"
-- TIME-AWARE: scoped to ~1-3 weeks of work
-- SEQUENTIAL: ordered from foundational → advanced
-- 6-8 subtasks minimum for any meaningful goal
+== SUBTASK QUALITY ==
+Every proposed subtask must be:
+- SPECIFIC: what exactly to do, not a vague topic
+  ✗ "Study math"  ✓ "Complete Khan Academy Calculus Unit 1-3 (est. 8 hrs)"
+- MEASURABLE: clear done condition
+  ✗ "Practice coding"  ✓ "Build 3 portfolio projects: CLI tool, web scraper, REST API"
+- TIME-AWARE: scoped to ~1–3 weeks of effort
+- SEQUENTIAL: foundational → advanced
+- 6–8 subtasks minimum for any meaningful goal
 
 == ACTIONS ==
-Only ONE action block per message. Format:
+One action block per message. Format:
 
 Navigate:
 \`\`\`action
@@ -67,19 +63,19 @@ Navigate:
 \`\`\`
 Pages: /dashboard /epics /epics/:id /streaks /time-audit /network /weekly /energy /settings
 
-Add task to epic (use epic_id from live state):
+Add task to existing epic:
 \`\`\`action
 {"type":"add_task","epic_id":1,"title":"Specific task title"}
 \`\`\`
 
-Log streak habit (use habit_id):
+Log streak habit:
 \`\`\`action
 {"type":"log_streak","habit_id":1}
 \`\`\`
 
-Add new habit:
+Add habit:
 \`\`\`action
-{"type":"add_habit","name":"Morning run","description":"30 min every morning","icon":"flame"}
+{"type":"add_habit","name":"Morning run","description":"30 min daily","icon":"flame"}
 \`\`\`
 
 Add contact:
@@ -87,7 +83,7 @@ Add contact:
 {"type":"add_contact","name":"Jane","role":"Engineer","company":"Google","relationship_type":"mentor","notes":"Met at hackathon"}
 \`\`\`
 
-Create goal (ONLY after user confirms):
+Create goal (ONLY after confirmation):
 \`\`\`action
 {"type":"create_goal","name":"Goal name","description":"One-sentence motivation","icon":"code","color":"teal","horizon":"quarter","end_date":"2026-09-11","subtasks":["Week 1-2: Specific deliverable A","Week 3-4: Specific deliverable B","Week 5-6: Specific deliverable C","Week 7-8: Specific deliverable D","Week 9-10: Specific deliverable E","Week 11-12: Final milestone F"]}
 \`\`\`
@@ -97,7 +93,7 @@ horizon: quarter (≤3mo) | year (≤1yr) | longterm (multi-year)
 end_date: ISO date string matching the timeframe the user specified
 
 == LIVE APP STATE ==
-${name || 'User'} — Level ${level || 1} — ${xp || 0} XP
+Level ${level || 1} — ${xp || 0} XP
 
 Epics:
 ${epicsList || '  (none yet)'}
@@ -105,11 +101,11 @@ ${epicsList || '  (none yet)'}
 Habits:
 ${habitsList || '  (none yet)'}
 
-Logged today: ${loggedToday}
+Logged today: ${loggedToday}`
 
-Keep replies focused and energetic. When proposing a plan, format the subtasks as a numbered list so the user can read and react before confirming.`
+    return buildSystemPrompt({ memories, extraRules })
   } catch {
-    return 'You are a helpful AI assistant inside a personal productivity app.'
+    return buildSystemPrompt({})
   }
 }
 
@@ -341,7 +337,7 @@ export default function AIPanel({ open, onClose, playSound }) {
     setLoading(true)
 
     try {
-      const systemPrompt = await buildSystemPrompt()
+      const systemPrompt = await buildChatSystemPrompt()
       const docContext = attachedDoc
         ? `\n\n== ATTACHED DOCUMENT: ${attachedDoc.name} ==\n${attachedDoc.content}\n== END DOCUMENT ==\n\nThe user may ask questions about this document. Reference it accurately.`
         : ''

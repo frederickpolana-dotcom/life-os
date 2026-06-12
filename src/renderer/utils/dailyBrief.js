@@ -3,6 +3,11 @@
  *   generateBriefTemplate  template fallback (no AI required)
  *   generateBriefWithAI    calls window.electronAPI.ai.chat; throws on failure
  */
+import { buildSystemPrompt } from './systemPrompt'
+
+const BRIEF_EXTRA_RULES = `TASK: Daily brief for the Life OS topbar.
+Write exactly 2–3 sentences in plain text only — no markdown, no bullet points, no greeting opener (e.g. no "Good morning").
+Focus only on what is most urgent and actionable based on the context provided.`
 
 function daysUntil(dateStr) {
   return Math.max(0, Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86_400_000))
@@ -42,7 +47,7 @@ export function generateBriefTemplate(topTasks, zeroStreaks, urgentEpics) {
   return sentences.slice(0, 3).join(' ')
 }
 
-export async function generateBriefWithAI(topTasks, zeroStreaks, urgentEpics, provider, model, ollamaEndpoint) {
+export async function generateBriefWithAI(topTasks, zeroStreaks, urgentEpics, provider, model, ollamaEndpoint, memories = []) {
   const lines = [`Time of day: ${timeLabel()}.`]
 
   if (urgentEpics.length > 0) {
@@ -68,7 +73,7 @@ export async function generateBriefWithAI(topTasks, zeroStreaks, urgentEpics, pr
     provider,
     model,
     ollamaEndpoint || null,
-    'You are writing a daily brief for a personal productivity dashboard. Based on the context below, write exactly 2-3 short sentences. Rules: punchy and direct, conversational tone, no bullet points, no markdown, do NOT start with a greeting like "Good morning", plain text only, focus on what is most urgent and actionable.',
+    buildSystemPrompt({ memories, extraRules: BRIEF_EXTRA_RULES }),
   )
 
   const clean = (text || '').trim()

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { buildSystemPrompt, fetchMemories } from '../utils/systemPrompt'
 
 const ENERGY_LABELS = { 1: '😩 Drained', 2: '😕 Low', 3: '😐 Neutral', 4: '😊 Good', 5: '🔥 Peak' }
 
@@ -74,22 +75,22 @@ function buildDataText({ completedTasks, habitStats, epicSummary, nudgeCount, en
 
 const EMPTY_FORM = { what_worked: '', what_didnt: '', dropping_this_week: '', focus_next_week: '', energy_rating: 3 }
 
-const SYSTEM_PROMPT = `You are a personal performance coach reviewing one week of productivity data.
+const REVIEW_EXTRA_RULES = `TASK: Generate a structured weekly review from the productivity data below.
 Respond with exactly four labeled sections using these exact markers on their own lines:
 
 [SUMMARY]
-Write 2-3 sentences summarising overall performance this week. Be specific — mention actual numbers and patterns.
+Write 2–3 sentences on overall performance — be specific, mention actual numbers and patterns.
 
 [WIN]
-State the single biggest win of the week in exactly 1 concise sentence.
+State the single biggest win of the week in exactly 1 sentence.
 
 [GAP]
-State the single biggest gap or missed opportunity in exactly 1 concise sentence.
+State the single biggest gap or missed opportunity in exactly 1 sentence.
 
 [QUESTIONS]
 Write exactly 3 reflective questions, one per line, each starting with "- ".
 Tailor every question to what specifically slipped or stood out in the data.
-Do not write anything outside these four sections. Do not add commentary or sign-offs.`
+Write nothing outside these four sections.`
 
 // ── Main component ───────────────────────────────────────────────────────────
 
@@ -248,11 +249,12 @@ export default function WeeklyReview({ awardXp }) {
       }
 
       // Need to (re)generate
-      const [provider, model, ollamaEndpoint, ollamaModel] = await Promise.all([
+      const [provider, model, ollamaEndpoint, ollamaModel, memories] = await Promise.all([
         window.electronAPI.settings.get('ai_provider'),
         window.electronAPI.settings.get('ai_model'),
         window.electronAPI.settings.get('ollama_endpoint'),
         window.electronAPI.settings.get('ollama_model'),
+        fetchMemories(),
       ])
 
       const effectiveModel = provider === 'ollama'
@@ -264,7 +266,7 @@ export default function WeeklyReview({ awardXp }) {
         provider,
         effectiveModel,
         ollamaEndpoint || null,
-        SYSTEM_PROMPT,
+        buildSystemPrompt({ memories, extraRules: REVIEW_EXTRA_RULES }),
       )
 
       const parsed = parseAIReview(rawText)

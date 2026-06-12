@@ -1,4 +1,21 @@
 import React, { useEffect, useState } from 'react'
+import { buildSystemPrompt, fetchMemories } from '../utils/systemPrompt'
+
+const SCHEDULE_EXTRA_RULES = `TASK: Generate a daily schedule.
+Return ONLY a valid JSON array — no markdown, no code fences, no explanation before or after it.
+Each element must have exactly these fields:
+  "start_time": string in "HH:MM" 24-hour format
+  "end_time": string in "HH:MM" 24-hour format
+  "task_id": number (the [id:N] from the task list) or null for non-task blocks
+  "label": string (concise display name, ≤60 chars)
+  "reason": string (one sentence, ≤80 chars)
+
+Rules:
+- Schedule within 08:00–21:00
+- Place highest-priority tasks during the user's peak productive window
+- Include 15–20 min breaks between deep work sessions
+- Honour fixed commitments at their listed times
+- 6–10 blocks total, each 30–120 minutes, chronological, no overlaps`
 
 const DAY_ABBR  = ['S','M','T','W','T','F','S']
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
@@ -235,7 +252,7 @@ export default function Daily({ awardXp }) {
     setScheduleError('')
     setScheduleLoading(true)
     try {
-      const [topTasks, memRow, todayRems, provider, model, ollamaEndpoint, ollamaModel] = await Promise.all([
+      const [topTasks, memRow, todayRems, provider, model, ollamaEndpoint, ollamaModel, memories] = await Promise.all([
         window.electronAPI.tasks.getTopTasks(10),
         window.electronAPI.db.get(
           "SELECT description FROM assistant_memory WHERE pattern_type = 'productive_hour'"
@@ -248,6 +265,7 @@ export default function Daily({ awardXp }) {
         window.electronAPI.settings.get('ai_model'),
         window.electronAPI.settings.get('ollama_endpoint'),
         window.electronAPI.settings.get('ollama_model'),
+        fetchMemories(),
       ])
 
       const now = new Date()
@@ -275,23 +293,7 @@ export default function Daily({ awardXp }) {
         remLines,
       ].join('\n')
 
-      const systemPrompt = `You are a personal productivity scheduler. Generate a realistic daily schedule.
-
-Return ONLY a valid JSON array — no markdown, no code fences, no explanation before or after it.
-Each element must have exactly these fields:
-  "start_time": string in "HH:MM" 24-hour format
-  "end_time": string in "HH:MM" 24-hour format
-  "task_id": number (the [id:N] from the task list) or null for non-task blocks
-  "label": string (concise display name, max 60 chars)
-  "reason": string (one sentence, max 80 chars)
-
-Rules:
-- Schedule within a realistic workday (08:00–21:00)
-- Place highest-priority tasks during the peak productive window
-- Include short breaks (15–20 min) between deep work sessions
-- Honour any fixed commitments at their listed times
-- Aim for 6–10 blocks total; each block 30–120 minutes
-- Blocks must not overlap and must appear in chronological order`
+      const systemPrompt = buildSystemPrompt({ memories, extraRules: SCHEDULE_EXTRA_RULES })
 
       const effectiveModel = (provider === 'ollama')
         ? (ollamaModel || 'llama3')
