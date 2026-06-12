@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { THEMES, THEME_PREVIEW_BG } from '../utils/themes'
 
 const PROVIDERS = [
   { value: 'anthropic', label: 'Anthropic (Claude)', keyLabel: 'API Key', keyPlaceholder: 'sk-ant-…' },
@@ -20,7 +21,7 @@ function modelsFor(provider) {
 
 const inputCls = 'w-full px-3 py-2 text-[12px] bg-teal-pale border border-teal-border rounded-sm outline-none focus:border-primary text-text-pri placeholder:text-text-hint'
 
-export default function Settings({ onProfileUpdate }) {
+export default function Settings({ onProfileUpdate, appTheme = 'dynamic', xp = 0, onThemeChange }) {
   const [profile, setProfile] = useState({ name: '', initials: '' })
   const [ai, setAi]           = useState({ provider: 'anthropic', model: 'claude-sonnet-4-20250514', key: '', ollamaEndpoint: 'http://localhost:11434', ollamaModel: 'llama3' })
   const [prefs, setPrefs]     = useState({ launch_on_startup: 'true', start_minimized: 'false' })
@@ -212,6 +213,52 @@ export default function Settings({ onProfileUpdate }) {
             />
           </div>
           <SaveBtn onClick={savePrefs} saved={saved === 'prefs'} />
+        </Section>
+
+        {/* Appearance */}
+        <Section title="Appearance">
+          <p className="text-[11px] text-text-muted mb-3">
+            Background theme. Earn XP to unlock new looks.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {THEMES.map(t => {
+              const unlocked = xp >= t.xpRequired
+              const active   = appTheme === t.id
+              const preview  = THEME_PREVIEW_BG[t.id]
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => unlocked && onThemeChange?.(t.id)}
+                  disabled={!unlocked}
+                  className={`relative p-3 rounded-[10px] border-2 text-left transition-all overflow-hidden ${
+                    active   ? 'border-primary shadow-[0_0_0_3px_rgba(29,158,117,0.18)]' :
+                    unlocked ? 'border-teal-border hover:border-primary/50' :
+                               'border-teal-border opacity-50 cursor-not-allowed'
+                  }`}
+                >
+                  {/* Preview swatch */}
+                  {t.id === 'pixel' ? (
+                    <div className="w-full h-10 rounded mb-2 bg-[#f4fdf8]" style={{
+                      backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 7px,rgba(29,158,117,0.18) 8px),repeating-linear-gradient(90deg,transparent,transparent 7px,rgba(29,158,117,0.18) 8px)',
+                      backgroundSize: '8px 8px',
+                    }} />
+                  ) : (
+                    <div className="w-full h-10 rounded mb-2" style={{ background: preview }} />
+                  )}
+                  <p className={`text-[12px] font-bold ${active ? 'text-primary' : 'text-teal-dark'}`}>{t.label}</p>
+                  <p className="text-[10px] text-text-muted leading-snug">{t.desc}</p>
+                  {!unlocked && (
+                    <p className="text-[10px] font-bold text-amber mt-0.5">🔒 {t.xpRequired} XP</p>
+                  )}
+                  {active && (
+                    <div className="absolute top-2 right-2 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                      <span className="text-white text-[8px] font-extrabold">✓</span>
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
         </Section>
 
         {/* Data */}

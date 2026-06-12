@@ -19,6 +19,7 @@ import Settings from './pages/Settings'
 import Welcome from './pages/Welcome'
 import { useAudio } from './hooks/useAudio'
 import { MarioFaceIcon } from './components/MarioSprite'
+import { computeBg } from './utils/themes'
 
 let toastId = 0
 
@@ -32,17 +33,20 @@ export default function App() {
   const [toasts, setToasts]           = useState([])
   const [confetti, setConfetti]       = useState(0)
   const [musicOn, setMusicOn]         = useState(false)
+  const [appTheme, setAppTheme]       = useState('dynamic')
+  const [bg, setBg]                   = useState(() => computeBg('dynamic'))
 
   const audio = useAudio()
 
   async function loadProfile() {
     try {
-      const [name, initials, xpVal, lvlVal, onboarded] = await Promise.all([
+      const [name, initials, xpVal, lvlVal, onboarded, theme] = await Promise.all([
         window.electronAPI.settings.get('user_name'),
         window.electronAPI.settings.get('user_initials'),
         window.electronAPI.settings.get('xp_total'),
         window.electronAPI.settings.get('xp_level'),
         window.electronAPI.settings.get('onboarding_complete'),
+        window.electronAPI.settings.get('app_theme'),
       ])
       if (name)     setUserName(name)
       if (initials) setUserInitials(initials)
@@ -50,9 +54,18 @@ export default function App() {
       if (lvlVal)   setLevel(Number(lvlVal))
       // show welcome unless explicitly completed
       setOnboardingDone(onboarded === 'true')
+      const t = theme || 'dynamic'
+      setAppTheme(t)
+      setBg(computeBg(t))
     } catch {
       setOnboardingDone(true)
     }
+  }
+
+  function handleThemeChange(themeId) {
+    setAppTheme(themeId)
+    setBg(computeBg(themeId))
+    window.electronAPI?.settings.set('app_theme', themeId).catch(() => {})
   }
 
   useEffect(() => {
@@ -61,6 +74,13 @@ export default function App() {
     window.electronAPI.db.run('ALTER TABLE epics ADD COLUMN end_date DATE').catch(() => {})
     loadProfile()
   }, [])
+
+  // Re-evaluate time-of-day background every 10 minutes (only when dynamic theme is active)
+  useEffect(() => {
+    if (appTheme !== 'dynamic') return
+    const id = setInterval(() => setBg(computeBg('dynamic')), 10 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [appTheme])
 
   // Global click sound + ripple on every button press
   useEffect(() => {
@@ -154,10 +174,10 @@ export default function App() {
 
   return (
     <MemoryRouter initialEntries={['/dashboard']}>
-      <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#0d1f14' }}>
+      <div className="flex h-screen w-screen overflow-hidden" style={{ background: bg.shell, transition: 'background-color 2.5s ease' }}>
         <Sidebar />
 
-        <div className="flex flex-col flex-1 min-w-0" style={{ background: '#f4fdf8' }}>
+        <div className="flex flex-col flex-1 min-w-0" style={{ background: bg.content, transition: 'background-color 2.5s ease' }}>
           <Topbar
             userName={userName}
             userInitials={userInitials}
@@ -167,7 +187,13 @@ export default function App() {
             onToggleMusic={toggleMusic}
           />
 
-          <main className="flex-1 overflow-y-auto px-8 py-6 game-bg">
+          <main
+            className="flex-1 overflow-y-auto px-8 py-6"
+            style={{
+              backgroundImage: bg.bgImage || 'none',
+              backgroundSize: bg.bgSize || '24px 24px',
+            }}
+          >
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard"  element={<Dashboard awardXp={(n) => awardXp(n, 'streak')} onOpenAI={() => setAiOpen(true)} />} />
@@ -180,7 +206,7 @@ export default function App() {
               <Route path="/network"    element={<NetworkCRM />} />
               <Route path="/weekly"     element={<WeeklyReview awardXp={(n) => awardXp(n, 'complete')} />} />
               <Route path="/energy"     element={<EnergyLog    awardXp={(n) => awardXp(n, 'complete')} />} />
-              <Route path="/settings"   element={<Settings onProfileUpdate={(n, i) => { setUserName(n); setUserInitials(i) }} />} />
+              <Route path="/settings"   element={<Settings onProfileUpdate={(n, i) => { setUserName(n); setUserInitials(i) }} appTheme={appTheme} xp={xp} onThemeChange={handleThemeChange} />} />
             </Routes>
           </main>
         </div>
