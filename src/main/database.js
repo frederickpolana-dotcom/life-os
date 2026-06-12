@@ -160,6 +160,8 @@ function initSchema() {
 
   // Migrations for existing DBs
   try { db.exec('ALTER TABLE epics ADD COLUMN end_date DATE') } catch {}
+  try { db.exec('ALTER TABLE subtasks ADD COLUMN priority_score INTEGER DEFAULT 0') } catch {}
+  try { db.exec('ALTER TABLE subtasks ADD COLUMN xp_value INTEGER DEFAULT 15') } catch {}
 
   seedIfEmpty()
 }

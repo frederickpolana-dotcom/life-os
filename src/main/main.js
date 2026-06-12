@@ -2,7 +2,8 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, shell } = 
 const path = require('path')
 const fs   = require('fs')
 const db   = require('./database')
-const { routeAiChat } = require('./aiHandler')
+const { routeAiChat }                    = require('./aiHandler')
+const { runScoringEngine, getTopTasks }  = require('./scoringEngine')
 
 // ── Single-instance lock ────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock()
@@ -239,6 +240,9 @@ ipcMain.handle('files:readDocument', async () => {
   }
 })
 
+// ── IPC: tasks ───────────────────────────────────────────────────────────────
+ipcMain.handle('tasks:getTopTasks', (_e, n = 5) => getTopTasks(db.getDb(), n))
+
 // ── IPC: widget controls ──────────────────────────────────────────────────────
 ipcMain.handle('widget:open-main', () => {
   mainWindow.show()
@@ -265,6 +269,10 @@ app.whenReady().then(() => {
   if (app.isPackaged) {
     app.setLoginItemSettings({ openAtLogin: launchOnStartup })
   }
+
+  // Run priority scoring engine on startup, then every 30 minutes
+  runScoringEngine(db.getDb())
+  setInterval(() => runScoringEngine(db.getDb()), 30 * 60 * 1000)
 })
 
 app.on('window-all-closed', (e) => {
