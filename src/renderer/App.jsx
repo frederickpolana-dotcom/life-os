@@ -44,20 +44,20 @@ export default function App() {
 
   async function loadProfile() {
     try {
-      const [name, initials, xpVal, lvlVal, onboarded, theme] = await Promise.all([
+      const [name, initials, xpVal, lvlVal, theme, epicRow] = await Promise.all([
         window.electronAPI.settings.get('user_name'),
         window.electronAPI.settings.get('user_initials'),
         window.electronAPI.settings.get('xp_total'),
         window.electronAPI.settings.get('xp_level'),
-        window.electronAPI.settings.get('onboarding_complete'),
         window.electronAPI.settings.get('app_theme'),
+        window.electronAPI.db.get('SELECT COUNT(*) as n FROM epics'),
       ])
       if (name)     setUserName(name)
       if (initials) setUserInitials(initials)
       if (xpVal)    setXp(Number(xpVal))
       if (lvlVal)   setLevel(Number(lvlVal))
-      // show welcome unless explicitly completed
-      setOnboardingDone(onboarded === 'true')
+      // show onboarding only when no epics exist yet
+      setOnboardingDone((epicRow?.n || 0) > 0)
       const t = theme || 'dynamic'
       setAppTheme(t)
       setBg(computeBg(t))
@@ -220,7 +220,7 @@ export default function App() {
 
   if (onboardingDone === false) {
     return (
-      <Welcome onComplete={() => { setOnboardingDone(true); loadProfile() }} />
+      <Welcome onComplete={() => { setOnboardingDone(true); loadProfile(); generateBrief(true) }} />
     )
   }
 
