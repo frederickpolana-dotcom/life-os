@@ -20,6 +20,7 @@ import Welcome from './pages/Welcome'
 import { useAudio } from './hooks/useAudio'
 import { MarioFaceIcon } from './components/MarioSprite'
 import { computeBg } from './utils/themes'
+import { generateBriefTemplate, generateBriefWithAI } from './utils/dailyBrief'
 
 let toastId = 0
 
@@ -35,6 +36,8 @@ export default function App() {
   const [musicOn, setMusicOn]         = useState(false)
   const [appTheme, setAppTheme]       = useState('dynamic')
   const [bg, setBg]                   = useState(() => computeBg('dynamic'))
+  const [brief, setBrief]             = useState('')
+  const [briefLoading, setBriefLoading] = useState(false)
 
   const audio = useAudio()
 
@@ -68,11 +71,58 @@ export default function App() {
     window.electronAPI?.settings.set('app_theme', themeId).catch(() => {})
   }
 
+  async function generateBrief(force = false) {
+    if (!window.electronAPI) return
+    const today = new Date().toISOString().slice(0, 10)
+
+    if (!force) {
+      const [cachedText, cachedDate] = await Promise.all([
+        window.electronAPI.settings.get('daily_brief_text'),
+        window.electronAPI.settings.get('daily_brief_date'),
+      ])
+      if (cachedDate === today && cachedText) { setBrief(cachedText); return }
+    }
+
+    setBriefLoading(true)
+    try {
+      const [topTasks, zeroStreaks, urgentEpics, provider, model, ollamaEndpoint] = await Promise.all([
+        window.electronAPI.tasks.getTopTasks(3),
+        window.electronAPI.db.query('SELECT name FROM streak_habits WHERE current_streak = 0'),
+        window.electronAPI.db.query(
+          `SELECT name, end_date FROM epics
+           WHERE end_date IS NOT NULL
+             AND CAST(julianday(end_date) - julianday('now') AS INTEGER) BETWEEN 0 AND 30
+             AND progress = 0 AND status != 'done'
+           ORDER BY end_date ASC`
+        ),
+        window.electronAPI.settings.get('ai_provider'),
+        window.electronAPI.settings.get('ai_model'),
+        window.electronAPI.settings.get('ollama_endpoint'),
+      ])
+
+      let text = ''
+      try {
+        text = await generateBriefWithAI(topTasks, zeroStreaks, urgentEpics, provider, model, ollamaEndpoint)
+      } catch {
+        text = generateBriefTemplate(topTasks, zeroStreaks, urgentEpics)
+      }
+
+      setBrief(text)
+      window.electronAPI.settings.set('daily_brief_text', text).catch(() => {})
+      window.electronAPI.settings.set('daily_brief_date', today).catch(() => {})
+    } catch {
+      setBrief(generateBriefTemplate([], [], []))
+    } finally {
+      setBriefLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!window.electronAPI) return
     // Runtime migration — safe to run every startup, errors mean column already exists
     window.electronAPI.db.run('ALTER TABLE epics ADD COLUMN end_date DATE').catch(() => {})
     loadProfile()
+    generateBrief()
   }, [])
 
   // Re-evaluate time-of-day background every 10 minutes (only when dynamic theme is active)
@@ -185,6 +235,9 @@ export default function App() {
             level={level}
             musicOn={musicOn}
             onToggleMusic={toggleMusic}
+            brief={brief}
+            briefLoading={briefLoading}
+            onRefreshBrief={() => generateBrief(true)}
           />
 
           <main

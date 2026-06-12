@@ -1,8 +1,6 @@
 import React from 'react'
 
 const LEVEL_THRESHOLDS = [0, 200, 500, 1000, 2000]
-const LEVEL_LABELS = ['Novice', 'Rising', 'Focused', 'Driven', 'Legendary']
-
 function xpForLevel(level) {
   return LEVEL_THRESHOLDS[level - 1] ?? 0
 }
@@ -10,37 +8,66 @@ function xpForNextLevel(level) {
   return LEVEL_THRESHOLDS[level] ?? LEVEL_THRESHOLDS[LEVEL_THRESHOLDS.length - 1]
 }
 
-function greeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
-  return 'Good evening'
-}
-
 function formatDate() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
-export default function Topbar({ userName, userInitials, xp, level, musicOn, onToggleMusic }) {
+// Inline refresh SVG — circular arrow
+function RefreshIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 4v6h-6"/>
+      <path d="M1 20v-6h6"/>
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+    </svg>
+  )
+}
+
+export default function Topbar({ userName, userInitials, xp, level, musicOn, onToggleMusic, brief, briefLoading, onRefreshBrief }) {
   const current = xp - xpForLevel(level)
   const needed  = xpForNextLevel(level) - xpForLevel(level)
   const pct     = level >= 5 ? 100 : Math.min(100, Math.round((current / needed) * 100))
 
   return (
     <header
-      className="h-[60px] min-h-[60px] flex items-center justify-between px-8"
+      className="h-[70px] min-h-[70px] flex items-center justify-between px-8"
       style={{ background: '#061710', borderBottom: '1px solid rgba(29,158,117,0.22)' }}
     >
-      {/* Left: greeting */}
-      <div className="flex flex-col leading-tight">
-        <span className="text-[15px] font-extrabold" style={{ color: '#4dffb0' }}>
-          {greeting()}, {userName} 👋
-        </span>
-        <span className="text-[11px] font-medium" style={{ color: '#2a5c40' }}>{formatDate()}</span>
+      {/* Left: daily brief + date */}
+      <div className="flex flex-col justify-center gap-0.5 max-w-[520px] min-w-0">
+        {briefLoading ? (
+          <span className="text-[11px] font-medium animate-pulse" style={{ color: '#2a5c40' }}>
+            Generating daily brief…
+          </span>
+        ) : (
+          <p
+            className="text-[11px] font-semibold line-clamp-3 leading-snug"
+            style={{ color: '#4dffb0' }}
+          >
+            {brief || <span style={{ color: '#2a5c40' }}>Loading…</span>}
+          </p>
+        )}
+        <span className="text-[10px] font-medium" style={{ color: '#2a5c40' }}>{formatDate()}</span>
       </div>
 
       {/* Right: music + XP bar + level badge + avatar */}
       <div className="flex items-center gap-4">
+
+        {/* Brief refresh */}
+        <button
+          onClick={onRefreshBrief}
+          disabled={briefLoading}
+          title="Refresh daily brief"
+          className="w-7 h-7 flex items-center justify-center transition-all hover:scale-110 disabled:opacity-30"
+          style={{
+            background: 'rgba(29,158,117,0.08)',
+            border: '1px solid rgba(29,158,117,0.2)',
+            borderRadius: 4,
+            color: '#4dffb0',
+          }}
+        >
+          <RefreshIcon />
+        </button>
 
         {/* Music toggle */}
         <button
