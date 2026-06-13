@@ -19,6 +19,7 @@ import NetworkCRM from './pages/NetworkCRM'
 import WeeklyReview from './pages/WeeklyReview'
 import EnergyLog from './pages/EnergyLog'
 import Settings from './pages/Settings'
+import Pomodoro from './pages/Pomodoro'
 import Welcome from './pages/Welcome'
 import { useAudio } from './hooks/useAudio'
 import { MarioFaceIcon } from './components/MarioSprite'
@@ -275,7 +276,8 @@ export default function App() {
               <Route path="/calendar"  element={<Calendar  awardXp={(n) => awardXp(n, 'streak')} />} />
               <Route path="/epics"      element={<Epics awardXp={(n) => awardXp(n, 'epic')} />} />
               <Route path="/epics/:id"  element={<EpicDetail awardXp={(n) => awardXp(n, 'complete')} />} />
-              <Route path="/streaks"    element={<Streaks awardXp={(n) => awardXp(n, 'streak')} />} />
+              <Route path="/streaks"    element={<Streaks   awardXp={(n) => awardXp(n, 'streak')} />} />
+              <Route path="/pomodoro"  element={<Pomodoro  awardXp={(n) => awardXp(n, 'complete')} />} />
               <Route path="/time-audit" element={<TimeAudit />} />
               <Route path="/network"    element={<NetworkCRM />} />
               <Route path="/weekly"     element={<WeeklyReview awardXp={(n) => awardXp(n, 'complete')} />} />
