@@ -13,8 +13,18 @@ const HORIZON_TABS = [
   { key: 'longterm',label: 'Long Term' },
 ]
 
+function useLiveClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return now
+}
+
 export default function Dashboard({ awardXp, onOpenAI }) {
   const navigate = useNavigate()
+  const now = useLiveClock()
   const [epics, setEpics]             = useState([])
   const [streaks, setStreaks]          = useState([])
   const [todayLogs, setTodayLogs]     = useState(new Set())
@@ -191,6 +201,9 @@ export default function Dashboard({ awardXp, onOpenAI }) {
 
       {/* Today's Focus strip — top 3 priority tasks */}
       <TopFocusStrip tasks={topTasks} onDone={completeTask} />
+
+      {/* Live clock + date */}
+      <LiveClock now={now} />
 
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-4 mb-8">
@@ -691,6 +704,76 @@ function StreakMini({ habit, logged, onLog }) {
           </svg>
         )}
       </button>
+    </div>
+  )
+}
+
+// ── Live Clock ────────────────────────────────────────────────────────────────
+
+const DAY_NAMES  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
+function LiveClock({ now }) {
+  const h   = now.getHours()
+  const m   = String(now.getMinutes()).padStart(2, '0')
+  const s   = String(now.getSeconds()).padStart(2, '0')
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const h12  = String(h % 12 || 12).padStart(2, '0')
+
+  const dayName   = DAY_NAMES[now.getDay()]
+  const monthName = MONTH_NAMES[now.getMonth()]
+  const dayNum    = now.getDate()
+  const year      = now.getFullYear()
+
+  // Ordinal suffix
+  const ord = dayNum === 1 || dayNum === 21 || dayNum === 31 ? 'st'
+             : dayNum === 2 || dayNum === 22         ? 'nd'
+             : dayNum === 3 || dayNum === 23         ? 'rd' : 'th'
+
+  return (
+    <div
+      className="mb-5 px-5 py-3 flex items-center gap-5 bounce-in"
+      style={{
+        background: '#061710',
+        border: '2px solid rgba(29,158,117,0.22)',
+        borderRadius: 6,
+        boxShadow: '3px 3px 0 #031008',
+      }}
+    >
+      {/* Time */}
+      <div className="flex items-baseline gap-1 font-mono flex-shrink-0">
+        <span
+          className="font-extrabold tracking-tight"
+          style={{ fontSize: 32, color: '#4dffb0', textShadow: '0 0 18px rgba(77,255,176,0.35)', lineHeight: 1 }}
+        >
+          {h12}:{m}
+        </span>
+        <span
+          className="font-extrabold animate-pulse"
+          style={{ fontSize: 32, color: '#1D9E75', lineHeight: 1 }}
+        >
+          :{s}
+        </span>
+        <span
+          className="font-bold ml-1"
+          style={{ fontSize: 13, color: '#2a5c40', letterSpacing: 2 }}
+        >
+          {ampm}
+        </span>
+      </div>
+
+      {/* Divider */}
+      <div style={{ width: 1, height: 36, background: 'rgba(29,158,117,0.2)' }} />
+
+      {/* Date */}
+      <div className="flex flex-col gap-0.5">
+        <span className="font-extrabold" style={{ fontSize: 14, color: '#4dffb0', letterSpacing: 0.5 }}>
+          {dayName}
+        </span>
+        <span className="font-semibold" style={{ fontSize: 11, color: '#2a5c40' }}>
+          {monthName} {dayNum}{ord}, {year}
+        </span>
+      </div>
     </div>
   )
 }
