@@ -267,7 +267,7 @@ export default function App() {
         </div>
 
         {/* AI Panel */}
-        <AIPanel open={aiOpen} onClose={() => setAiOpen(false)} playSound={playSound} />
+        <AIPanel open={aiOpen} onClose={() => setAiOpen(false)} playSound={playSound} awardXp={awardXp} />
 
         {/* Floating AI button — Mario face */}
         <button
