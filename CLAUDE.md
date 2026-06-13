@@ -290,7 +290,8 @@ d:\Dashboard\
 │       ├── components/
 │       │   ├── Sidebar.jsx
 │       │   ├── Topbar.jsx
-│       │   ├── AIPanel.jsx       # Slide-in AI chat with persistent memory
+│       │   ├── AIPanel.jsx       # Slide-in AI chat with persistent memory + actions
+│       │   ├── CommandPalette.jsx# Global ⌘K command center (fuzzy search + actions)
 │       │   ├── MarioSprite.jsx   # Pixel-art walking Mario + MarioFaceIcon
 │       │   ├── EpicCard.jsx
 │       │   ├── ProgressBar.jsx
@@ -301,6 +302,7 @@ d:\Dashboard\
 │       │   ├── Dashboard.jsx
 │       │   ├── Daily.jsx        # Daily Planner + "Generate my day" AI schedule
 │       │   ├── Journal.jsx      # Daily diary (mood + free-write) + AI 7/30-day reflections
+│       │   ├── Insights.jsx     # Analytics: activity heatmap, level ring, mood/energy, charts
 │       │   ├── Calendar.jsx
 │       │   ├── Epics.jsx
 │       │   ├── EpicDetail.jsx   # Milestones + recurring Daily Checklist per epic
@@ -429,3 +431,8 @@ Electron loads that URL in dev mode; `dist/index.html` in production.
 ### ✅ Phase 11 — Journal + AI reflections
 - `Journal.jsx`: three tabs — **Write** (mood 1–5 + free-write + optional highlight/gratitude/challenge, rotating daily prompt, +8 XP first entry per day), **AI Reflections** (7- or 30-day narrative / emotional arc / patterns / insight via the shared provider layer, cached in `journal_reflections` by fingerprint), **History** (month calendar heatmap coloured by mood + recent-entry list)
 - Journaling streak badge; `journal_entry` AI action lets the assistant write/append entries on command
+
+### ✅ Phase 12 — Insights analytics + ⌘K Command Palette
+- `Insights.jsx` (`/insights`): premium analytics page — animated count-ups, a **level/XP progress ring**, a **GitHub-style 17-week activity heatmap** synthesising tasks + streak logs + recurring completions + journal + energy into a per-day intensity, a **Mood vs Energy** 30-day line chart, **30-day habit-consistency** bars, **epic momentum** bars, and **weekday productivity** analysis. All Recharts; graceful empty states + loading skeleton
+- `CommandPalette.jsx`: global **⌘K / Ctrl+K** command center (toggle wired in `App.jsx`, rendered inside `MemoryRouter` so `useNavigate` works). Fuzzy-search (subsequence scoring) across all pages, active epics, and habits, plus quick actions. Arrow/Enter/Esc keyboard nav, grouped results, log-a-streak inline (+10 XP, stays open). Topbar has a discoverable "Search ⌘K" trigger
+- `Epics.jsx`: opens the create-epic modal when reached via `?new=1` (used by the palette's "Create a new epic")

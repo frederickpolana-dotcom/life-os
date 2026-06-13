@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import EpicCard from '../components/EpicCard'
 import Modal from '../components/Modal'
 import { presetToEndDate, endDateToHorizon, daysUntil } from '../utils/dates'
@@ -77,8 +78,18 @@ export default function Epics({ awardXp }) {
   const [adding, setAdding] = useState(false)
   const [form, setForm]     = useState(DEFAULT_FORM)
   const [saving, setSaving] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => { if (window.electronAPI) load() }, [])
+
+  // Open the create modal when arrived via Command Palette (?new=1)
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setAdding(true)
+      searchParams.delete('new')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   async function load() {
     try {

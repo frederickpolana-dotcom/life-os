@@ -3,11 +3,13 @@ import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import AIPanel from './components/AIPanel'
+import CommandPalette from './components/CommandPalette'
 import XPToast from './components/XPToast'
 import ConfettiCelebration from './components/ConfettiCelebration'
 import Dashboard from './pages/Dashboard'
 import Daily from './pages/Daily'
 import Journal from './pages/Journal'
+import Insights from './pages/Insights'
 import Calendar from './pages/Calendar'
 import Epics from './pages/Epics'
 import EpicDetail from './pages/EpicDetail'
@@ -33,6 +35,7 @@ export default function App() {
   const [userName, setUserName]       = useState('You')
   const [userInitials, setUserInitials] = useState('ME')
   const [aiOpen, setAiOpen]           = useState(false)
+  const [cmdOpen, setCmdOpen]         = useState(false)
   const [toasts, setToasts]           = useState([])
   const [confetti, setConfetti]       = useState(0)
   const [musicOn, setMusicOn]         = useState(false)
@@ -134,6 +137,18 @@ export default function App() {
     const id = setInterval(() => setBg(computeBg('dynamic')), 10 * 60 * 1000)
     return () => clearInterval(id)
   }, [appTheme])
+
+  // Global ⌘K / Ctrl+K → toggle Command Palette
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault()
+        setCmdOpen(o => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Global click sound + ripple on every button press
   useEffect(() => {
@@ -241,6 +256,7 @@ export default function App() {
             brief={brief}
             briefLoading={briefLoading}
             onRefreshBrief={() => generateBrief(true)}
+            onOpenCommand={() => setCmdOpen(true)}
           />
 
           <main
@@ -255,6 +271,7 @@ export default function App() {
               <Route path="/dashboard"  element={<Dashboard awardXp={(n) => awardXp(n, 'streak')} onOpenAI={() => setAiOpen(true)} />} />
               <Route path="/daily"      element={<Daily     awardXp={(n) => awardXp(n, 'streak')} />} />
               <Route path="/journal"    element={<Journal   awardXp={(n) => awardXp(n, 'complete')} />} />
+              <Route path="/insights"   element={<Insights />} />
               <Route path="/calendar"  element={<Calendar  awardXp={(n) => awardXp(n, 'streak')} />} />
               <Route path="/epics"      element={<Epics awardXp={(n) => awardXp(n, 'epic')} />} />
               <Route path="/epics/:id"  element={<EpicDetail awardXp={(n) => awardXp(n, 'complete')} />} />
@@ -267,6 +284,14 @@ export default function App() {
             </Routes>
           </main>
         </div>
+
+        {/* Command Palette (⌘K) */}
+        <CommandPalette
+          open={cmdOpen}
+          onClose={() => setCmdOpen(false)}
+          onOpenAI={() => setAiOpen(true)}
+          awardXp={awardXp}
+        />
 
         {/* AI Panel */}
         <AIPanel open={aiOpen} onClose={() => setAiOpen(false)} playSound={playSound} awardXp={awardXp} />

@@ -23,7 +23,7 @@ function RefreshIcon() {
   )
 }
 
-export default function Topbar({ userName, userInitials, xp, level, musicOn, onToggleMusic, brief, briefLoading, onRefreshBrief }) {
+export default function Topbar({ userName, userInitials, xp, level, musicOn, onToggleMusic, brief, briefLoading, onRefreshBrief, onOpenCommand }) {
   const current = xp - xpForLevel(level)
   const needed  = xpForNextLevel(level) - xpForLevel(level)
   const pct     = level >= 5 ? 100 : Math.min(100, Math.round((current / needed) * 100))
@@ -50,8 +50,28 @@ export default function Topbar({ userName, userInitials, xp, level, musicOn, onT
         <span className="text-[10px] font-medium" style={{ color: '#2a5c40' }}>{formatDate()}</span>
       </div>
 
-      {/* Right: music + XP bar + level badge + avatar */}
+      {/* Right: command + music + XP bar + level badge + avatar */}
       <div className="flex items-center gap-4">
+
+        {/* Command palette trigger (⌘K) */}
+        <button
+          onClick={onOpenCommand}
+          title="Command palette (Ctrl+K)"
+          className="flex items-center gap-2 h-7 pl-2.5 pr-2 transition-all hover:scale-[1.03]"
+          style={{
+            background: 'rgba(29,158,117,0.08)',
+            border: '1px solid rgba(29,158,117,0.22)',
+            borderRadius: 5,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4dffb0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span className="text-[10px] font-bold" style={{ color: '#2a5c40' }}>Search</span>
+          <kbd className="text-[8px] font-extrabold px-1 py-0.5 rounded" style={{ background: 'rgba(29,158,117,0.15)', color: '#4dffb0', border: '1px solid rgba(29,158,117,0.25)' }}>
+            ⌘K
+          </kbd>
+        </button>
 
         {/* Brief refresh */}
         <button
