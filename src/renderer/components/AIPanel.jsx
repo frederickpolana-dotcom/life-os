@@ -131,6 +131,12 @@ Update epic status:
 {"type":"update_epic","epic_id":1,"status":"in_progress"}
 status: not_started | in_progress | done
 
+─ JOURNAL
+Write / append to today's journal entry (+8 XP for a new day):
+{"type":"journal_entry","content":"What the user reflected on today","mood":4}
+mood: 1 (rough) … 5 (great), optional
+→ Use when the user says "journal that…", "note in my diary…", "write down that today I…"
+
 ─ HABITS
 Log streak habit (+10 XP):
 {"type":"log_streak","habit_id":1}
@@ -414,6 +420,35 @@ export default function AIPanel({ open, onClose, playSound, awardXp }) {
           const e = await window.electronAPI.db.get('SELECT name FROM epics WHERE id=?', [action.epic_id])
           navigate(`/epics/${action.epic_id}`)
           return `📋 "${e?.name || 'Epic'}" → ${action.status.replace('_', ' ')}`
+        }
+
+        case 'journal_entry': {
+          // Ensure the table exists even if the Journal page hasn't been opened yet
+          await window.electronAPI.db.run(`
+            CREATE TABLE IF NOT EXISTS journal_entries (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              entry_date DATE NOT NULL UNIQUE,
+              content TEXT, mood INTEGER, highlight TEXT, gratitude TEXT, challenge TEXT,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`).catch(() => {})
+          const existing = await window.electronAPI.db.get(
+            "SELECT content FROM journal_entries WHERE entry_date = date('now')", []
+          )
+          const isNew = !existing
+          const merged = existing?.content
+            ? `${existing.content}\n\n${action.content}`
+            : (action.content || '')
+          await window.electronAPI.db.run(
+            `INSERT INTO journal_entries (entry_date, content, mood)
+             VALUES (date('now'), ?, ?)
+             ON CONFLICT(entry_date) DO UPDATE SET
+               content = ?, mood = COALESCE(?, mood), updated_at = CURRENT_TIMESTAMP`,
+            [merged, action.mood || null, merged, action.mood || null]
+          )
+          if (isNew) await doAwardXp(8)
+          navigate('/journal')
+          return `📖 ${isNew ? 'Added a journal entry for today' : 'Appended to today\'s journal'}${isNew ? ' +8 XP' : ''}`
         }
 
         case 'log_streak': {

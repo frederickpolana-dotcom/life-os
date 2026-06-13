@@ -171,6 +171,48 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   content TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Created at runtime by their owning page (CREATE TABLE IF NOT EXISTS via IPC):
+
+-- subtasks gains is_recurring=1 for "Daily Checklist" tasks; one row per day they're ticked:
+CREATE TABLE IF NOT EXISTS recurring_completions (   -- EpicDetail.jsx / Dashboard.jsx
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subtask_id INTEGER REFERENCES subtasks(id) ON DELETE CASCADE,
+  completed_date DATE NOT NULL,
+  UNIQUE(subtask_id, completed_date)
+);
+
+CREATE TABLE IF NOT EXISTS journal_entries (         -- Journal.jsx
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entry_date DATE NOT NULL UNIQUE,
+  content TEXT,
+  mood INTEGER,                       -- 1–5
+  highlight TEXT, gratitude TEXT, challenge TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS journal_reflections (     -- Journal.jsx (cached AI recaps)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  range_type TEXT NOT NULL,           -- '7' | '30'
+  end_date DATE NOT NULL,
+  narrative TEXT, mood_arc TEXT, patterns TEXT, insight TEXT,
+  fingerprint TEXT,                   -- cache key; regenerate only when entries change
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(range_type, end_date)
+);
+
+CREATE TABLE IF NOT EXISTS daily_schedules (         -- Daily.jsx ("Generate my day")
+  schedule_date DATE PRIMARY KEY,
+  blocks TEXT NOT NULL                -- JSON array of time blocks
+);
+
+CREATE TABLE IF NOT EXISTS weekly_ai_reviews (       -- WeeklyReview.jsx (cached AI review)
+  week_start DATE PRIMARY KEY,
+  summary TEXT, biggest_win TEXT, biggest_gap TEXT, reflective_questions TEXT,
+  data_fingerprint TEXT,
+  generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 ### Settings keys (seeded defaults)
@@ -207,6 +249,8 @@ CREATE TABLE IF NOT EXISTS ai_messages (
 | Complete an entire Epic | +50 XP |
 | Submit a Weekly Review | +25 XP |
 | Log energy for the day | +5 XP |
+| Write a journal entry (first per day) | +8 XP |
+| Check off a daily epic task | +10 XP |
 
 ### Level thresholds
 
@@ -255,13 +299,17 @@ d:\Dashboard\
 │       │   └── ConfettiCelebration.jsx
 │       ├── pages/
 │       │   ├── Dashboard.jsx
+│       │   ├── Daily.jsx        # Daily Planner + "Generate my day" AI schedule
+│       │   ├── Journal.jsx      # Daily diary (mood + free-write) + AI 7/30-day reflections
+│       │   ├── Calendar.jsx
 │       │   ├── Epics.jsx
-│       │   ├── EpicDetail.jsx
+│       │   ├── EpicDetail.jsx   # Milestones + recurring Daily Checklist per epic
 │       │   ├── Streaks.jsx
 │       │   ├── TimeAudit.jsx
 │       │   ├── NetworkCRM.jsx
-│       │   ├── WeeklyReview.jsx
+│       │   ├── WeeklyReview.jsx # Auto-generated AI weekly review
 │       │   ├── EnergyLog.jsx
+│       │   ├── Welcome.jsx      # 4-step first-run onboarding
 │       │   └── Settings.jsx
 │       └── hooks/
 │           └── useAudio.js
@@ -369,3 +417,15 @@ Electron loads that URL in dev mode; `dist/index.html` in production.
 ### ✅ Phase 9 — Package to .exe
 - `electron-builder.yml`: NSIS config, `win.icon: public/icon.png` (auto-converted to .ico)
 - `npm run build:win` → `dist-electron/Life OS Setup.exe`
+
+### ✅ Phase 10 — AI deepening + product polish
+- Shared `utils/systemPrompt.js`: provider-agnostic personality layer (`buildSystemPrompt` + `fetchMemories`) used by every LLM call
+- `Daily.jsx`: "Generate my day" — AI builds a JSON time-block schedule, drag-to-reorder, cached in `daily_schedules`
+- `WeeklyReview.jsx`: auto-generated AI review ([SUMMARY]/[WIN]/[GAP]/[QUESTIONS]), cached by data fingerprint
+- `EpicDetail.jsx`: epics split into **Milestones** (one-time, +15 XP) and a recurring **Daily Checklist** (+10 XP/day via `recurring_completions`); progress % counts milestones only. Dashboard shows a "Daily Grind" sidebar of all recurring tasks
+- `Welcome.jsx`: 4-step first-run onboarding (name → first epic → first habit → XP intro); shown when DB has no epics
+- `AIPanel.jsx`: full task-aware context (subtask IDs + daily/done state) and 13 action types — `move_to_daily`, `move_to_milestone`, `complete_task`, `log_daily_epic_task`, `delete_task`, `update_epic`, `add_daily_task`, `journal_entry`, plus navigate/add_task/log_streak/add_habit/add_contact/create_goal. All XP routed through App's `awardXp` (toasts + confetti)
+
+### ✅ Phase 11 — Journal + AI reflections
+- `Journal.jsx`: three tabs — **Write** (mood 1–5 + free-write + optional highlight/gratitude/challenge, rotating daily prompt, +8 XP first entry per day), **AI Reflections** (7- or 30-day narrative / emotional arc / patterns / insight via the shared provider layer, cached in `journal_reflections` by fingerprint), **History** (month calendar heatmap coloured by mood + recent-entry list)
+- Journaling streak badge; `journal_entry` AI action lets the assistant write/append entries on command

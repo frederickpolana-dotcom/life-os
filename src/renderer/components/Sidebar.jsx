@@ -57,6 +57,12 @@ const IconCalGrid = makeIcon(<>
   <line x1="8" y1="18" x2="8" y2="18" /><line x1="12" y1="18" x2="12" y2="18" />
 </>)
 
+const IconJournal = makeIcon(<>
+  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+  <line x1="9" y1="7" x2="15" y2="7" /><line x1="9" y1="11" x2="14" y2="11" />
+</>)
+
 const IconSun = makeIcon(<>
   <circle cx="12" cy="12" r="5" />
   <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
@@ -73,6 +79,7 @@ const IconSettings = makeIcon(<>
 const NAV_MAIN = [
   { to: '/dashboard', label: 'Dashboard',    Icon: IconGrid },
   { to: '/daily',     label: 'Daily Planner',Icon: IconSun },
+  { to: '/journal',   label: 'Journal',      Icon: IconJournal },
   { to: '/epics',     label: 'My Epics',     Icon: IconRocket },
   { to: '/streaks',   label: 'Streaks',      Icon: IconFlame },
 ]
